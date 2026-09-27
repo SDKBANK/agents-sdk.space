@@ -70,7 +70,7 @@ test('loading and guide use the opaque black two-mode palette and enlarged intro
 
   assert.match(landing, /\.logo-container\s*\{\s*width:\s*88px;\s*height:\s*88px;/);
   assert.match(guide, /guide-core\.css\?v=3[\s\S]*theme-modes\.css\?v=2/);
-  assert.match(core, /\.tab\{[^}]*background:#000000!important;opacity:1!important;/);
+  assert.match(core, /\.tab\{[^}]*background:#000(?:000)?!important;opacity:1!important;/);
   assert.match(modes, /html, body, body\.sdk-layout \{ background-color: #000000 !important; \}/);
   assert.match(modes, /\.feature, \.news-card, \.chip, \.step, \.fact, pre,[\s\S]*background: #000000 !important/);
   assert.match(modes, /html\[data-theme="docs"\][\s\S]*--mode-accent: #70568f/);
