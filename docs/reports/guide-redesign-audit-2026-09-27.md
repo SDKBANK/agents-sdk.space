@@ -42,3 +42,16 @@ Commit: `97e15ba997baf89e6a7542bb413cc266edf26a5e`
 - ยังยืนยัน visual ของหน้า Guide หลัง login ไม่ได้ เพราะ audit นี้ไม่มี signed-in test session และจะไม่ขอหรือใช้ credential.
 - ยังยืนยัน deployment ของ commit `97e15ba997baf89e6a7542bb413cc266edf26a5e` ไม่ได้จาก GitHub status เพราะ repository ไม่มี workflow/status ที่รายงานสำหรับ commit ก่อนหน้า.
 - คำว่า “Guide” กับ “Playground” ใช้ปะปนกันในชื่อ task และ UI แต่ repository contract ระบุ `/guide` เป็น Playground; จึงไม่เปลี่ยน label โดยไม่มี product decision.
+
+
+## Update — CORE SDK theme integration
+
+ตรวจพบ commit `0595ebe6292ecb9402b1106330e0471facbd5500` เพิ่ม `assets/guide-core.css` แต่ไม่มี reference จาก `guide.html` หรือ `assets/guide.js`; ดังนั้นไฟล์ถูก deploy ได้แต่ browser ไม่โหลด และ visual redesign ไม่เกิดขึ้นจริง
+
+แก้แล้วโดยเพิ่ม `<link rel="stylesheet" href="/assets/guide-core.css?v=1">` หลัง shared `theme.css` ใน `guide.html` เพื่อให้ page-scoped overrides ทำงานตามลำดับ cascade
+
+Commit แก้ไข: `0f3dfa8bb5b066ba2c0bd2f97a09151963551ec5`
+
+ตรวจค่า contrast ของปุ่มหลังธีมใหม่: ขาวบน `#6c21ff` ประมาณ 6.37:1 และ hover `#7c32ff` ประมาณ 5.59:1 ผ่านเกณฑ์ข้อความปกติ จึงไม่ย้อนการกำหนดสีปุ่มของธีมใหม่
+
+ยังต้องตรวจ visual หลัง deploy ด้วย signed-in session และ viewport 390px/1280px ตามรายการเดิม ไม่มี GitHub Actions run หรือ commit status สำหรับ commit ธีมในเวลาที่ตรวจ
