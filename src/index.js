@@ -97,12 +97,13 @@ function authProviderStatus(env) {
     session_secret: sessionReady,
     admin_gate: { enabled: true, allowlist_configured: adminAllowlistReady, env_name: 'ADMIN_ALLOWED_LOGINS' },
     owner_google_gate: { enabled: true, configured: ownerGoogleConfigured(env), required_provider: 'google', email_env_name: 'OWNER_GOOGLE_EMAIL', sub_env_name: 'OWNER_GOOGLE_SUB' },
+    exa_search: { configured: truthySecret(env, 'EXA_API_KEY'), env_name: 'EXA_API_KEY' },
     github: { provider: 'github', client_id: truthySecret(env, 'GITHUB_CLIENT_ID'), client_secret: truthySecret(env, 'GITHUB_CLIENT_SECRET'), ready: githubReady },
     google: { provider: 'google', client_id: truthySecret(env, 'GOOGLE_CLIENT_ID'), client_secret: truthySecret(env, 'GOOGLE_CLIENT_SECRET'), ready: googleReady },
     expected_secrets: ['AUTH_SESSION_SECRET', 'GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
     admin_expected_variable: 'ADMIN_ALLOWED_LOGINS',
     owner_expected_variable: 'OWNER_GOOGLE_EMAIL',
-    optional_variables: ['PUBLIC_SITE_URL', 'OWNER_GOOGLE_SUB'],
+    optional_variables: ['PUBLIC_SITE_URL', 'OWNER_GOOGLE_SUB', 'EXA_API_KEY'],
     secret_values_exposed: false
   };
 }
@@ -616,6 +617,45 @@ async function handleImage(request, env) {
   }, lastStatus === 429 ? 429 : 502, baseHeaders);
 }
 
+async function handleExaSearch(request, env) {
+  if (request.method !== 'POST') return json({ ok: false, status: 'method_not_allowed', message: 'ส่งคำขอด้วย POST เท่านั้น' }, 405, { allow: 'POST' });
+  const origin = request.headers.get('origin');
+  if (origin && origin !== new URL(request.url).origin) return json({ ok: false, error: 'forbidden_origin', message: 'ค้นหาได้จากเว็บไซต์นี้เท่านั้น' }, 403);
+  if (!await currentSession(request, env)) return json({ ok: false, error: 'authentication_required', message: 'กรุณาเข้าสู่ระบบก่อนค้นหา' }, 401);
+  let body = {};
+  try { body = await request.json(); } catch (_) { return json({ ok: false, status: 'validation_error', message: 'รูปแบบคำขอไม่ถูกต้อง' }, 400); }
+  const query = typeof body.query === 'string' ? body.query.trim() : '';
+  if (!query) return json({ ok: false, status: 'validation_error', message: 'กรุณาใส่คำค้นหา' }, 400);
+  if (query.length > 1000) return json({ ok: false, status: 'validation_error', message: 'คำค้นหายาวเกินขีดจำกัด 1,000 ตัวอักษร' }, 413);
+  const requestedCount = Number(body.numResults);
+  const numResults = Number.isInteger(requestedCount) ? Math.min(10, Math.max(1, requestedCount)) : 5;
+  const type = ['auto', 'neural', 'keyword', 'fast', 'instant'].includes(body.type) ? body.type : 'auto';
+  if (!truthySecret(env, 'EXA_API_KEY')) return json({ ok: false, status: 'service_unavailable', message: 'ยังไม่ได้ตั้งค่า Exa ใน Worker' }, 503);
+  const rate = checkRateLimit(request, 'exa-search');
+  const baseHeaders = rateLimitHeaders(rate);
+  if (rate.limited) return json({ ok: false, status: 'rate_limited', message: 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่' }, 429, baseHeaders);
+  let response;
+  try {
+    response = await fetch('https://api.exa.ai/search', {
+      method: 'POST',
+      headers: { 'x-api-key': env.EXA_API_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify({ query, type, numResults, contents: { highlights: true } })
+    });
+  } catch (_) {
+    return json({ ok: false, status: 'service_error', message: 'เชื่อมต่อ Exa ไม่สำเร็จ กรุณาลองใหม่' }, 502, baseHeaders);
+  }
+  if (!response.ok) return json({ ok: false, status: response.status === 429 ? 'rate_limited' : 'service_error', message: response.status === 429 ? 'Exa กำลังถูกใช้งานหนาแน่น กรุณาลองใหม่' : 'Exa ไม่สามารถทำคำค้นหานี้ได้' }, response.status === 429 ? 429 : 502, baseHeaders);
+  let data;
+  try { data = await response.json(); } catch (_) { return json({ ok: false, status: 'service_error', message: 'Exa ส่งผลลัพธ์ที่อ่านไม่ได้กลับมา' }, 502, baseHeaders); }
+  const results = (Array.isArray(data.results) ? data.results : []).slice(0, numResults).filter((item) => item && typeof item.url === 'string' && /^https?:\/\//i.test(item.url)).map((item) => ({
+    title: typeof item.title === 'string' && item.title.trim() ? item.title.trim().slice(0, 500) : item.url,
+    url: item.url,
+    published_date: typeof item.publishedDate === 'string' ? item.publishedDate : null,
+    highlights: Array.isArray(item.highlights) ? item.highlights.filter((text) => typeof text === 'string').slice(0, 3).map((text) => text.slice(0, 2000)) : []
+  }));
+  return json({ ok: true, status: 'completed', query, results, secret_values_exposed: false }, 200, baseHeaders);
+}
+
 const SDK_KEY_PREFIX = 'lsg_';
 const SDK_KEY_TYP = 'sdk_key';
 const SDK_KEY_TTL_DAYS = 30;
@@ -767,12 +807,13 @@ export default {
     if (pathname === '/auth/github/callback') return handleAuthCallback('github', request, env);
     if (pathname === '/auth/google/callback') return handleAuthCallback('google', request, env);
 
-    if (request.method === 'OPTIONS' && (pathname === '/api/chat' || pathname === '/api/image')) return new Response(null, { status: 204, headers: { 'access-control-allow-origin': url.origin, 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type' } });
+    if (request.method === 'OPTIONS' && (pathname === '/api/chat' || pathname === '/api/image' || pathname === '/api/exa/search')) return new Response(null, { status: 204, headers: { 'access-control-allow-origin': url.origin, 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type' } });
     if (pathname === '/api/chat' || pathname === '/api/image') {
       if (!await currentSession(request, env)) return json({ ok: false, error: 'authentication_required', message: 'กรุณาเข้าสู่ระบบก่อนใช้งาน AI Workspace' }, 401);
     }
     if (pathname === '/api/chat') return handleChat(request, env);
     if (pathname === '/api/image') return handleImage(request, env);
+    if (pathname === '/api/exa/search') return handleExaSearch(request, env);
 
     if (pathname === '/api/feed') return handleFeed(request, env, url);
 
@@ -791,6 +832,7 @@ export default {
       ['/home', '/home'], ['/home.html', '/home'],
       ['/chat', '/chat'], ['/chat.html', '/chat'],
       ['/tools', '/tools'], ['/tools.html', '/tools'],
+      ['/exa', '/exa'], ['/exa.html', '/exa'],
       ['/guide', '/guide'], ['/guide.html', '/guide'],
       ['/news', '/news'], ['/news.html', '/news'],
       ['/keys', '/keys'], ['/keys.html', '/keys']
