@@ -2,12 +2,14 @@
 
 AI Framework: **LSUPERAGENT public AI workspace**
 
-Last updated: **2026-09-27T11:24:00+07:00 Asia/Bangkok**
-Last update task: **Give /loading and /guide an opaque black canvas with persistent Normal and Docs color modes; enlarge the Loading logo.**
+Last updated: **2026-09-27T12:57:00+07:00 Asia/Bangkok**
+Last update task: **Add authenticated Exa search at /exa through a Worker function that reads EXA_API_KEY from Cloudflare environment.**
 
 The proposed one-owner session continuity system is specified in [`docs/session-continuity-pilot.md`](docs/session-continuity-pilot.md). It is design-only; no database or resumable chat runtime has been created.
 
 Feature goal: Build a Code chat entry so the signed-in owner can ask for code and receive a code-oriented AI response, with no claim that the page edits GitHub files. `/tools` links to `/chat?mode=code`; `assets/chat.js` sends `mode: "code"` and `tool: "code"` to `/api/chat`. The result is text in the chat. It is not a repository editor or a verified live-model end-to-end run. The current rate guard allows 10 requests in 10 minutes per IP and tool in a Worker isolate's memory; it is neither a durable per-user quota nor a spend cap. Chat turns remain in browser page memory and disappear on reload.
+
+Exa Search: `/tools` links to authenticated `/exa`. It calls `POST /api/exa/search`; the Cloudflare Worker reads `EXA_API_KEY` from its environment and makes the Exa request server-side. Set `EXA_API_KEY` as a Worker secret to enable search. The browser never receives the key. Search is login-gated and the Worker rate limit is temporary, not a spend cap.
 
 This repository powers the public LSUPERAGENT AI Workspace. The login UI presents email/password, Google OAuth, and GitHub OAuth. The chat UI uses the existing signed session and server-side `/api/chat` route. Email/password depends on Firebase Web configuration and the Email/Password provider being enabled. GitHub OAuth depends on the existing Worker client ID/secret. Each login issues a six-hour signed cookie; historical session storage and server-side session revocation are not implemented.
 
