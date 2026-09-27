@@ -96,6 +96,38 @@ test('research forces web_search and returns normalized sources', async () => {
   });
 });
 
+test('Exa search keeps the API key server-side and returns bounded public results', async () => {
+  await withFetchStub(async (url, init) => {
+    assert.equal(String(url), 'https://api.exa.ai/search');
+    assert.equal(init.headers['x-api-key'], 'test-exa-secret');
+    const payload = JSON.parse(init.body);
+    assert.deepEqual(payload, { query: 'Cloudflare Workers', type: 'auto', numResults: 2, contents: { highlights: true } });
+    return jsonResponse({ results: [
+      { title: 'Workers', url: 'https://example.com/workers', publishedDate: '2026-09-01', highlights: ['A useful passage'], secret: 'must not leak' },
+      { title: 'Docs', url: 'https://example.com/docs', highlights: ['Another passage'] },
+      { title: 'ignored overflow', url: 'https://example.com/overflow' },
+      { title: 'invalid protocol', url: 'javascript:alert(1)' }
+    ] });
+  }, async () => {
+    const response = await worker.fetch(await request('/api/exa/search', { query: 'Cloudflare Workers', numResults: 2 }), { EXA_API_KEY: 'test-exa-secret', AUTH_SESSION_SECRET: SESSION_SECRET });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.results.length, 2);
+    assert.equal(body.results[0].published_date, '2026-09-01');
+    assert.deepEqual(body.results[0].highlights, ['A useful passage']);
+    assert.equal(JSON.stringify(body).includes('test-exa-secret'), false);
+    assert.equal(JSON.stringify(body).includes('must not leak'), false);
+    assert.equal(body.secret_values_exposed, false);
+  });
+});
+
+test('Exa search requires a signed session and configured environment key', async () => {
+  const unauthenticated = await worker.fetch(new Request('https://agents-sdk.space/api/exa/search', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: 'test' }) }), { EXA_API_KEY: 'test-key', AUTH_SESSION_SECRET: SESSION_SECRET });
+  assert.equal(unauthenticated.status, 401);
+  const unconfigured = await worker.fetch(await request('/api/exa/search', { query: 'test' }), { AUTH_SESSION_SECRET: SESSION_SECRET });
+  assert.equal(unconfigured.status, 503);
+});
+
 test('read URL uses the same forced web_search contract', async () => {
   await withFetchStub(async (_url, init) => {
     const payload = JSON.parse(init.body);
@@ -171,6 +203,18 @@ test('workspace requires a valid user session', async () => {
   const location = new URL(response.headers.get('location'), 'https://agents-sdk.space');
   assert.equal(location.pathname, '/login');
   assert.equal(location.searchParams.get('return_to'), '/chat');
+});
+
+test('Exa search page is included in the authenticated workspace', async () => {
+  const anonymous = await worker.fetch(new Request('https://agents-sdk.space/exa'), {});
+  assert.equal(anonymous.status, 302);
+  assert.equal(new URL(anonymous.headers.get('location'), 'https://agents-sdk.space').searchParams.get('return_to'), '/exa');
+  const cookie = await sessionCookie();
+  const signedIn = await worker.fetch(new Request('https://agents-sdk.space/exa', { headers: { cookie } }), {
+    AUTH_SESSION_SECRET: SESSION_SECRET,
+    ASSETS: { fetch: async () => new Response('<!doctype html><title>Exa Search</title>', { headers: { 'content-type': 'text/html' } }) }
+  });
+  assert.equal(signedIn.status, 200);
 });
 
 test('authenticated entry and OAuth login default to home while direct chat stays available', async () => {
