@@ -86,3 +86,15 @@ body { color: #ffffff; }
 .tk-func { color: #a9b5c4; }
 .tk-type, .tk-property, .tk-flag { color: #b2c0ce; }
 .tk-constant, .tk-number, .tk-variable { color: #c7bd9c; }
+
+
+/* Optional owner-requested font trial. Local face until a licensed webfont is supplied. */
+@font-face { font-family: "Kantalad Trial"; src: local("Kantalad Cnd Bold"), local("KantaladCnd-Bold"); font-weight: 700; font-style: normal; font-display: swap; }
+:root { --sdk-content-font: "Kantalad Trial", "Noto Sans Thai", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+body.sdk-layout { font-family: var(--sdk-content-font); }
+.sdk-layout :is(main, .content, .view, .login) :is(p, li, h1, h2, h3, label, button, .card, .lead, .lede) { font-family: var(--sdk-content-font); }
+.sdk-header-row :is(.brand, .brand-link, .page-title, .sdk-brand) { font-size: 12px; letter-spacing: -.02em; }
+.sdk-header-row :is(.brand, .page-title, .sdk-brand, .brand-link strong) { gap: 4px; }
+.sdk-header-row .page-title span { margin-left: -2px; }
+.sdk-layout :is(pre, code, kbd, samp, .cw, .cw *) { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.sdk-layout .reading-intro { max-width: 65ch; color: var(--muted); line-height: 1.7; }

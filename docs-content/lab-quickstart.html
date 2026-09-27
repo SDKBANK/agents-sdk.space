@@ -1,5 +1,5 @@
 <h1>ติดตั้งและรัน</h1>
-<p class="lead">รันตัวอย่างครบทุกระนาบบนเครื่องของคุณ แบบออฟไลน์ได้โดยไม่ต้องมี API key</p>
+<p class="lead">รันตัวอย่างออฟไลน์เพื่อติดตามคำขอผ่านแต่ละระนาบ แล้วตรวจผลด้วยชุดทดสอบ</p>
 <p>ลำดับการทำงาน: Intent Envelope → State Ownership Gate → Action Classifier → Approval Gate → Tool Access Broker → Runner → Evidence Spine → Trace Grader</p>
 <h2>1. ดาวน์โหลด</h2>
 <p><a href="/assets/lab/lab_harness.py" download>lab_harness.py</a> · <a href="/assets/lab/lab_patterns.py" download>lab_patterns.py</a> · <a href="/assets/lab/test_lab.py" download>test_lab.py</a> · <a href="/assets/lab/test_patterns.py" download>test_patterns.py</a> · <a href="/assets/lab/requirements.txt" download>requirements.txt</a></p>
@@ -19,3 +19,4 @@ python lab_harness.py</code></pre>
 <p>งาน restart จะถามอนุมัติในเทอร์มินัล 2 ครั้ง (แผน + เครื่องมือ)</p>
 <h2>5. รันชุดทดสอบ</h2>
 <pre data-title="terminal"><code>OPENAI_AGENTS_DISABLE_TRACING=1 python -m pytest -q test_lab.py test_patterns.py</code></pre>
+

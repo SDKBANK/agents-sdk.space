@@ -1,5 +1,5 @@
 <h1>การตั้งค่า client</h1>
-<p class="lead">ตัวเลือกทั้งหมดของ <code>new Lsupergen(options)</code></p>
+<p class="lead">กำหนด API base, timeout และการเชื่อมต่อใน client เดียว แล้วนำกลับมาใช้กับแต่ละคำขอ</p>
 <pre data-title="client.mjs"><code>import { Lsupergen } from 'lsupergen-sdk';
 
 const client = new Lsupergen({
@@ -42,3 +42,4 @@ client.request(method, path, options?)</code></pre>
 <h3>TypeScript</h3>
 <pre data-title="typed.ts"><code>type ChatReply = { ok: boolean; status: string; message: string; sources: { title: string; url: string }[] };
 const reply = await client.post&lt;ChatReply&gt;('/chat', { body: { message: 'hi' } });</code></pre>
+

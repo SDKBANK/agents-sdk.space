@@ -1,5 +1,5 @@
 <h1>Retry และ timeout</h1>
-<p class="lead">SDK ลองใหม่ให้อัตโนมัติเมื่อปัญหาน่าจะหายเอง</p>
+<p class="lead">กำหนดจำนวนครั้งและเวลารอ เพื่อให้โปรเจกต์รับมือกับการเชื่อมต่อที่สะดุด</p>
 <h2>เมื่อไหร่ที่ retry</h2>
 <ul>
   <li>HTTP <code>408</code>, <code>409</code>, <code>429</code> และ <code>5xx</code></li>
@@ -31,3 +31,4 @@ setTimeout(() => controller.abort(), 3_000);
 await client.post('/chat', { body: { message: 'hi' }, signal: controller.signal });</code></pre>
 <p>ถ้ายกเลิก<strong>ระหว่างที่คำขอกำลังส่ง</strong> SDK จะไม่ retry และโยน error ต้นทาง (<code>AbortError</code>) ออกมา</p>
 <div class="callout warn"><p><strong>ข้อจำกัดของ 0.1.0:</strong> ถ้า <code>signal</code> ถูกยกเลิกไปแล้วก่อนเริ่ม หรือยกเลิกระหว่างที่ SDK กำลังรอเพื่อ retry คำขอถัดไปจะยังถูกส่งออกไป และอาจจบด้วย <code>APIError</code> แทน <code>AbortError</code> ถ้าต้องการให้การยกเลิกหยุดทุกอย่างจริง ให้ตั้ง <code>maxRetries: 0</code> และเช็ก <code>signal.aborted</code> ก่อนเรียก</p></div>
+

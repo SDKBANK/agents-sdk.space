@@ -1,5 +1,5 @@
 <h1>POST /image</h1>
-<p class="lead">สร้างภาพจากคำอธิบาย ได้ไฟล์ PNG แบบ base64</p>
+<p class="lead">อธิบายภาพ ส่ง prompt และแปลงข้อมูล base64 ที่ได้รับเป็นไฟล์ PNG</p>
 <h2>Request body</h2>
 <table><tbody>
   <tr><td><code>prompt</code></td><td>string</td><td>คำอธิบายภาพ (≤ 12,000 ตัวอักษร)</td></tr>
@@ -19,3 +19,4 @@ await writeFile(result.image.filename, Buffer.from(result.image.data_base64, 'ba
   "image": { "mime_type": "image/png", "data_base64": "iVBORw0…", "filename": "lsuperagen-image.png", "revised_prompt": null }
 }</code></pre>
 <div class="callout"><p>การสร้างภาพใช้เวลานานกว่าแชท ควรตั้ง <code>timeout</code> อย่างน้อย 120–180 วินาที</p></div>
+

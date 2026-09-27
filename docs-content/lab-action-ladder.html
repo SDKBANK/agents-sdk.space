@@ -1,5 +1,5 @@
 <h1>Action Ladder</h1>
-<p class="lead">การเดินทางของคำขอหนึ่งผ่านทั้ง 4 ระดับ และ dispatcher ที่ส่งงานไปตามช่องทาง</p>
+<p class="lead">จัดประเภทคำขอเป็น OBSERVE, DRAFT, PREPARE หรือ EXECUTE แล้วส่งไปยังช่องทางทำงานที่เหมาะสม</p>
 <h2>ตัวอย่าง: อัปเกรด config ของ payment-gateway</h2>
 <ol class="steps">
 <li><strong>OBSERVE</strong> อ่าน config ปัจจุบันและเอกสาร</li>
@@ -50,3 +50,4 @@ class ActionLadderDispatcher:
             if handler.can_handle(plan.action_type):
                 return handler.execute(plan)
         raise ValueError(f&quot;no handler for {plan.action_type}&quot;)</code></pre>
+

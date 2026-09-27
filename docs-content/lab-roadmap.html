@@ -1,5 +1,5 @@
 <h1>ขึ้น production</h1>
-<p class="lead">ขั้นตอนเชื่อมตัวอย่างเข้ากับระบบจริง ทำทีละขั้นได้</p>
+<p class="lead">เชื่อมเครื่องมือ เก็บสถานะ และเพิ่มชุดทดสอบทีละส่วน เพื่อนำตัวอย่างไปพัฒนาเป็นระบบใช้งาน</p>
 <ol class="steps">
 <li><strong>เชื่อมเครื่องมือกับระบบจริง</strong><br>แทนที่ตัวฟังก์ชันใน <code>lab_harness.py</code> ด้วยการเรียก API ของคุณ คง <code>needs_approval=True</code> ไว้กับเครื่องมือที่เปลี่ยนระบบ
 <pre data-title="เชื่อมกับ API ของคุณ"><code>import httpx
@@ -16,3 +16,4 @@ def read_system_status(service_name: str) -&gt; str:
 <li><strong>เพิ่ม test จากเหตุการณ์จริง</strong><br>เขียน trace ที่ผิดพลาดเป็น test ด้วย <code>ScriptedModel</code></li>
 <li><strong>ต่อ CI</strong><br>รัน <code>pytest</code> ใน GitHub Actions ทุก PR</li>
 </ol>
+

@@ -1,5 +1,5 @@
 <h1>State: 3 แบบ และ compaction</h1>
-<p class="lead">เลือกเจ้าของสถานะหนึ่งแบบต่อการสนทนา</p>
+<p class="lead">เลือกวิธีเก็บสถานะให้ตรงกับบทสนทนา แล้วกำหนดจังหวะย่อบริบทเพื่อส่งต่องาน</p>
 <pre data-title="เลือกใช้ทีละแบบ"><code>from agents import Runner, SQLiteSession
 
 # 1) SDK Session: your app owns the history
@@ -36,3 +36,4 @@ session = OpenAIResponsesCompactionSession(
 )
 result = await Runner.run(agent, &quot;hi&quot;, session=session)</code></pre>
 <div class="callout"><p>ค่าเริ่มต้นของ SDK ย่อเมื่อมีรายการที่ย่อได้ตั้งแต่ 10 รายการ และ compaction session ใช้กับ <code>OpenAIConversationsSession</code> ไม่ได้</p></div>
+

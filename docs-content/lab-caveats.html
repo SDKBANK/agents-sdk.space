@@ -1,5 +1,5 @@
 <h1>ข้อควรรู้</h1>
-<p class="lead">ข้อจำกัดของ SDK ที่เกี่ยวกับสถาปัตยกรรมนี้</p>
+<p class="lead">เลือกเวอร์ชันและรูปแบบ session ให้เข้ากัน แล้วใช้รายการนี้ตรวจความพร้อมก่อนอัปเกรด</p>
 <ol>
 <li>ตัวอย่างใช้ <code>openai-agents==0.22.3</code> pin เวอร์ชันและรันชุดทดสอบทุกครั้งที่อัปเกรด</li>
 <li><code>previous_response_id</code> ลดขนาดข้อมูลที่ส่ง แต่ไม่ลดโทเคนที่ประมวลผล ควรตั้งเกณฑ์ compaction</li>
@@ -8,3 +8,4 @@
 <li><code>OpenAIResponsesCompactionSession</code> ใช้ครอบ <code>OpenAIConversationsSession</code> ไม่ได้</li>
 <li>ใส่ <code>ProgrammaticToolCallingTool</code> ได้ 1 ตัวต่อ agent</li>
 </ol>
+

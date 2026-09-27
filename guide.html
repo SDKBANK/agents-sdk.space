@@ -70,9 +70,10 @@ th{color:var(--muted);font-weight:600}
 footer{margin-top:44px;color:var(--muted);font-size:.84rem;border-top:1px solid var(--line);padding-top:18px}
 </style>
 <link rel="stylesheet" href="/assets/layout.css?v=1">
-<link rel="stylesheet" href="/assets/theme.css?v=2">
+<link rel="stylesheet" href="/assets/theme.css?v=3">
 <link rel="stylesheet" href="/assets/guide-core.css?v=3">
 <link rel="stylesheet" href="/assets/theme-modes.css?v=2">
+<link rel="stylesheet" href="/assets/editorial.css?v=1">
 </head>
 <body class="sdk-layout sdk-simple">
 <header class="sdk-site-header"><div class="sdk-frame sdk-header-row">
@@ -84,7 +85,7 @@ footer{margin-top:44px;color:var(--muted);font-size:.84rem;border-top:1px solid 
 
 
   <h1>คู่มือ lsupergen-sdk</h1>
-  <p class="lead">ติดตั้งแพ็กเกจ <a href="https://www.npmjs.com/package/lsupergen-sdk"><code>lsupergen-sdk</code></a> จาก npm แล้วเรียก API ของ agents-sdk.space ได้ทันที ทุกขั้นในหน้านี้มีปุ่ม <strong>รันจริง</strong> ที่เรียกผ่านแพ็กเกจตัวเดียวกับที่เผยแพร่บน npm (เวอร์ชัน 0.1.0) และแสดงผลตอบกลับจริงจากเซิร์ฟเวอร์ ไม่มีผลลัพธ์จำลอง</p>
+  <p class="lead">ติดตั้ง <code>lsupergen-sdk</code> ตั้งค่า client แล้วทดลองส่งคำขอทีละขั้น เพื่อนำโค้ดและผลตอบกลับไปปรับใช้ในโปรเจกต์</p>
   <div class="facts" aria-label="ข้อมูลแพ็กเกจ">
     <span class="fact">แพ็กเกจ <strong>lsupergen-sdk</strong></span>
     <span class="fact">SDK ที่โหลดในหน้านี้ <strong id="sdk-version">…</strong></span>
@@ -119,13 +120,13 @@ bun add lsupergen-sdk</pre></div>
   </section>
 
   <section class="step" id="key">
-    <div class="step-head"><div><div class="step-num">STEP 2</div><h2>ใส่ API key</h2></div><span class="badge" id="key-state">ยังไม่มี key</span></div>
-    <p>สร้าง key ที่หน้า <a href="/keys"><b>API keys</b></a> คัดลอกมา แล้ววางในช่องนี้ หน้านี้เก็บ key ไว้ในหน่วยความจำของแท็บนี้เท่านั้น (ไม่บันทึกลงเบราว์เซอร์) และไม่แสดง key บนหน้าจอ</p>
+    <div class="step-head"><div><div class="step-num">STEP 2</div><h2>ใส่ API key</h2></div><span class="badge" id="key-state">ใส่ key เพื่อเริ่ม</span></div>
+    <p>เปิดหน้า <a href="/keys">API keys</a> คัดลอก key แล้ววางในช่องนี้เพื่อเริ่มทดสอบ</p>
     <div class="actions"><a class="ghost-link" href="/keys">สร้าง key ที่หน้า API keys →</a></div>
     <label for="api-key">วาง API key ของคุณ (ขึ้นต้นด้วย <code>lsg_</code>)</label>
     <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="lsg_••••••••">
     <div class="actions"><button class="ghost" id="clear-key" type="button">ล้าง key</button></div>
-    <p class="note warn">อย่า commit key ลง Git และอย่าฝัง key ในโค้ดฝั่งเบราว์เซอร์ที่เผยแพร่ ให้เก็บเป็น environment variable หรือ Cloudflare Secret</p>
+    <p class="note warn">ตั้งค่า environment variable ฝั่งเซิร์ฟเวอร์ แล้วให้ client อ่านค่าเมื่อเริ่มทำงาน</p>
   </section>
 
   <section class="step" id="config">
@@ -171,7 +172,7 @@ console.log(me.user.email, me.key.expires_at);</pre></div>
 
   <section class="step" id="chat">
     <div class="step-head"><div><div class="step-num">STEP 6</div><h2>เรียก AI Chat</h2></div><span class="badge" data-badge="chat">พร้อมรัน</span></div>
-    <p><code>POST /chat</code> ส่งข้อความไปยังโมเดล AI จริงของระบบ ผลลัพธ์อยู่ใน <code>message</code> ถ้าบริการ AI ยังไม่พร้อม API จะตอบ <code>503</code> ตามจริง ไม่มีคำตอบปลอม</p>
+    <p><code>POST /chat</code> รับข้อความและคืนคำตอบใน <code>message</code> เพื่อนำไปแสดงผลหรือประมวลผลต่อ</p>
     <div class="code"><pre>const reply = await client.post('/chat', {
   body: { message: 'สรุปจุดเด่นของ lsupergen-sdk ใน 1 ประโยค' },
 });
@@ -322,3 +323,4 @@ curl -sS {{BASE}}/chat \
 <script type="module" src="/assets/guide.js"></script>
 </body>
 </html>
+

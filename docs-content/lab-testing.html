@@ -1,5 +1,5 @@
 <h1>ทดสอบแบบออฟไลน์</h1>
-<p class="lead"><code>agents.testing.ScriptedModel</code> คือโมเดลที่กำหนดคำตอบล่วงหน้า ทดสอบได้ครบวงจรโดยไม่เรียก API</p>
+<p class="lead">กำหนดคำตอบด้วย ScriptedModel แล้วทดสอบเครื่องมือและ hooks แบบออฟไลน์ เพื่อทำซ้ำและเทียบผลได้</p>
 <pre data-title="ScriptedModel"><code>from agents.testing import ScriptedModel, assistant_message, function_call
 
 model = ScriptedModel([
@@ -111,3 +111,4 @@ def test_output_guardrails_conflict_with_server_managed_state():
     with pytest.raises(UserError, match=&quot;cannot be combined&quot;):
         asyncio.run(Runner.run(agent(), &quot;hi&quot;, previous_response_id=&quot;resp_1&quot;))
     assert asyncio.run(Runner.run(agent(), &quot;hi&quot;, session=SQLiteSession(&quot;g1&quot;))).final_output == &quot;ok&quot;</code></pre>
+

@@ -1,5 +1,5 @@
 <h1>การติดตั้ง</h1>
-<p class="lead">ติดตั้ง lsupergen-sdk ด้วย package manager ที่คุณใช้อยู่</p>
+<p class="lead">เลือก package manager ติดตั้ง lsupergen-sdk และตรวจเวอร์ชันก่อนเริ่มตัวอย่างแรก</p>
 <h2>ติดตั้งแพ็กเกจ</h2>
 <pre data-title="terminal"><code>npm install lsupergen-sdk
 # หรือ
@@ -13,7 +13,7 @@ bun add lsupergen-sdk</code></pre>
     <tr><td>Node.js</td><td>18 ขึ้นไป</td><td>ใช้ <code>fetch</code> ในตัว</td></tr>
     <tr><td>Cloudflare Workers</td><td>ทุกเวอร์ชันปัจจุบัน</td><td>ดู <a href="/docs/runtimes">Runtime ที่รองรับ</a></td></tr>
     <tr><td>Bun / Deno</td><td>ปัจจุบัน</td><td>ESM</td></tr>
-    <tr><td>เบราว์เซอร์</td><td>รุ่นใหม่</td><td>อย่าฝัง key ในโค้ดที่เผยแพร่</td></tr>
+    <tr><td>เบราว์เซอร์</td><td>รุ่นใหม่</td><td>เรียกผ่าน backend ของโปรเจกต์</td></tr>
   </tbody>
 </table>
 <h2>ESM และ CommonJS</h2>
@@ -22,3 +22,4 @@ bun add lsupergen-sdk</code></pre>
 <h2>ตรวจเวอร์ชัน</h2>
 <pre data-title="terminal"><code>npm ls lsupergen-sdk
 node -e "import('lsupergen-sdk').then(m => console.log(m.VERSION))"</code></pre>
+

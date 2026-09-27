@@ -29,11 +29,11 @@ body.sdk-layout { margin: 0; padding: 0; width: 100%; max-width: none; min-heigh
 .sdk-header-row > * { min-width: 0; }
 .sdk-header-row > a:not(.brand):not(.brand-link):not(.sdk-brand) { white-space: nowrap; font-size: 12px; }
 .sdk-header-row :is(.brand, .brand-link, .page-title, .sdk-brand) {
-  flex: none; margin: 0; font-size: 14px; line-height: 1.2;
+  flex: none; margin: 0; font-size: 12px; line-height: 1.2;
   font-weight: 700; letter-spacing: 0; white-space: nowrap;
 }
 .sdk-header-row :is(.brand, .page-title, .sdk-brand, .brand-link strong) {
-  display: flex; align-items: center; gap: 6px;
+  display: flex; align-items: center; gap: 4px;
 }
 .sdk-header-row .brand-link strong { font-size: inherit; }
 .sdk-header-row :is(.brand, .page-title, .sdk-brand, .brand-link) :is(img, svg, .mark, .brand-mark) {
@@ -84,3 +84,4 @@ body.sdk-layout { margin: 0; padding: 0; width: 100%; max-width: none; min-heigh
   .sdk-header-row > nav { font-size: 12px; }
   .sdk-header-row > nav :is(a, button) { font-size: 12px; }
 }
+

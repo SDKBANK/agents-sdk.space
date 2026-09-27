@@ -1,5 +1,5 @@
 <h1>ระนาบ 6 · Evidence Spine</h1>
-<p class="lead">ทุกข้ออ้างในคำตอบสุดท้ายชี้กลับไปยัง Source ID, Tool Call ID, Artifact Path และ Trace Span ID ได้</p>
+<p class="lead">เชื่อมคำตอบกับแหล่งข้อมูล การเรียกเครื่องมือ และไฟล์ผลลัพธ์ เพื่อเปิดตรวจย้อนหลังได้</p>
 <ul>
 <li><strong>Ledger</strong> บันทึกเหตุการณ์ด้วย <code>RunHooks</code> / <code>AgentHooks</code></li>
 <li><strong>Claim-Evidence Map</strong> จับคู่ข้ออ้างกับรายการใน ledger</li>
@@ -27,3 +27,4 @@ class EvidenceSpineHooks(RunHooks):
 
     async def on_agent_end(self, context: AgentHookContext, agent: Agent, output: Any) -&gt; None:
         self.evidence_ledger.append({&quot;event&quot;: &quot;agent_end&quot;, &quot;agent&quot;: agent.name, &quot;final_claim&quot;: str(output)})</code></pre>
+

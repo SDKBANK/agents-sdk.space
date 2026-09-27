@@ -1,5 +1,5 @@
 <h1>API key</h1>
-<p class="lead">API key ใช้ยืนยันตัวตนทุกคำขอ ยกเว้น <code>/health</code></p>
+<p class="lead">สร้างข้อมูลยืนยันตัวตนของโปรเจกต์ แล้วใช้ SDK ส่งคำขอไปยัง API</p>
 <h2>สร้าง key</h2>
 <ol>
   <li>เข้าสู่ระบบที่ agents-sdk.space</li>
@@ -20,6 +20,7 @@
 <pre data-title="HTTP"><code>Authorization: Bearer lsg_your_key_here</code></pre>
 <h2>ความปลอดภัย</h2>
 <div class="callout warn">
-  <p>อย่า commit key ลง Git และอย่าฝังในโค้ดฝั่งเบราว์เซอร์ที่เผยแพร่ เก็บเป็น environment variable หรือ <code>wrangler secret put</code></p>
+  <p>ตั้งค่า key ผ่าน environment variable หรือ <code>wrangler secret put</code></p>
 </div>
 <p>key ไม่มีการเก็บในฐานข้อมูล จึงยกเลิกทีละตัวไม่ได้ ถ้า key หลุดให้หยุดใช้และรอหมดอายุ หรือให้ผู้ดูแลเปลี่ยน <code>AUTH_SESSION_SECRET</code> ซึ่งจะยกเลิก key และ session ทั้งหมดพร้อมกัน</p>
+

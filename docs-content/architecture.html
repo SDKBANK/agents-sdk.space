@@ -1,5 +1,5 @@
 <h1>โครงสร้างระบบ (core)</h1>
-<p class="lead">“core” ของเว็บ agents-sdk.space คือ Cloudflare Worker ตัวเดียว ทุกคำขอผ่านมันก่อนเสมอ แล้วมันตัดสินใจว่าจะตอบ API เอง หรือส่งไฟล์ HTML ให้เบราว์เซอร์</p>
+<p class="lead">ติดตามคำขอจากหน้าเว็บผ่าน Worker ไปยัง API เพื่อเลือกไฟล์และส่วนเชื่อมต่อที่ต้องปรับใช้</p>
 <h2>เส้นทางของคำขอ</h2>
 <pre data-title="flow"><code>เบราว์เซอร์ / SDK
   ↓
@@ -30,3 +30,4 @@ src/index.js                               ← core: routing, session, API, AI
 <p>merge เข้า branch <code>main</code> แล้ว Cloudflare Workers Builds จะ build และ deploy ให้อัตโนมัติ ความลับทั้งหมด (<code>OPENAI_API_KEY</code>, <code>AUTH_SESSION_SECRET</code> ฯลฯ) ตั้งใน Cloudflare dashboard ไม่อยู่ใน repo</p>
 <h2>ทำไมไม่ใช้ Docus/Nuxt</h2>
 <p>Docus สร้างด้วย Nuxt ต้องมีขั้น build และเปลี่ยนโครงสร้างทั้งเว็บ ระบบเอกสารนี้ทำหน้าที่เดียวกัน (sidebar แบ่งหมวด, ค้นหา, สารบัญ, ก่อนหน้า/ถัดไป) ด้วย HTML + JS ธรรมดาที่รันบน Worker เดิมได้เลย</p>
+

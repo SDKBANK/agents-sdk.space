@@ -1,5 +1,5 @@
 <h1>ระนาบ 1 · Human / Channel</h1>
-<p class="lead">รับคำขอจากผู้ใช้หรือ API แล้วแปลงเป็น Intent Envelope ที่ตรวจแล้ว</p>
+<p class="lead">แปลงคำขอเป็น Intent Envelope ที่มีเป้าหมายและบริบท พร้อมส่งให้ส่วนวางแผน</p>
 <ol class="steps">
 <li>รับคำขอ</li>
 <li><strong>Input Guardrail</strong> กั้น prompt injection และคำขอนอกนโยบาย</li>
@@ -32,3 +32,4 @@ class PlanContract(BaseModel):
     requires_approval: bool
     evidence_rationale: str</code></pre>
 <p>ใน SDK ใช้ <code>@input_guardrail</code> แล้วใส่ใน <code>Agent(input_guardrails=[...])</code></p>
+

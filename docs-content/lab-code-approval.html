@@ -1,5 +1,5 @@
 <h1>อนุมัติ 2 ชั้น</h1>
-<p class="lead">อนุมัติทั้งแผนและการเรียกเครื่องมือจริง</p>
+<p class="lead">แยกการตรวจแผนออกจากการตรวจอาร์กิวเมนต์ เพื่อพิจารณาสิ่งที่จะเกิดขึ้นก่อนเรียกเครื่องมือ</p>
 <table><thead><tr><th>ชั้น</th><th>อยู่ที่</th><th>หยุดอะไร</th><th>กลไก</th></tr></thead><tbody>
 <tr><td>1. Plan gate</td><td>แอปของคุณ ก่อนให้สิทธิ์เครื่องมือ</td><td>ทั้งงาน</td><td><code>approve(plan)</code></td></tr>
 <tr><td>2. Tool gate</td><td>SDK ตอนโมเดลจะเรียกเครื่องมือ</td><td>การเรียกครั้งนั้น</td><td><code>needs_approval=True</code> → <code>result.interruptions</code> → <code>RunState.approve/reject</code></td></tr>
@@ -98,3 +98,4 @@ if __name__ == &quot;__main__&quot;:
 <li>ปฏิเสธที่ชั้นแผน → <code>ABORTED</code> และไม่เรียกโมเดล</li>
 <li>อนุมัติแผนแต่ปฏิเสธเครื่องมือ → เครื่องมือไม่ถูกเรียก</li>
 </ul>
+

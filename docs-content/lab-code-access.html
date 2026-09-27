@@ -1,5 +1,5 @@
 <h1>Scoped Tool Access</h1>
-<p class="lead">ให้ agent ใช้ได้เฉพาะเครื่องมือตามระดับ Action Ladder ของแผน</p>
+<p class="lead">กำหนดชุดเครื่องมือจาก Action Ladder แล้วนำฟังก์ชันตัวอย่างไปเชื่อมกับบริการของโปรเจกต์</p>
 <pre data-title="lab_harness.py" data-source="lab_harness.py"><code># ---------------------------------------------------------------- Plane 4: scoped tool access
 @function_tool
 def read_system_status(service_name: str) -&gt; str:
@@ -38,3 +38,4 @@ def read_logs(service_name: str) -&gt; str:
 
 ops_tools = tool_namespace(name=&quot;ops&quot;, description=&quot;Operations read tools&quot;, tools=[read_logs])
 agent = Agent(name=&quot;Ops&quot;, tools=[*ops_tools, ToolSearchTool()])</code></pre>
+

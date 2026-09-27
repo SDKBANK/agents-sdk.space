@@ -1,5 +1,5 @@
 <h1>POST /chat</h1>
-<p class="lead">ส่งข้อความไปยังโมเดล AI ของระบบและรับคำตอบจริง</p>
+<p class="lead">กำหนดข้อความและบริบท ส่งคำขอ แล้วอ่าน message และ sources เพื่อนำคำตอบไปแสดงผล</p>
 <h2>Request body</h2>
 <table>
   <thead><tr><th>ฟิลด์</th><th>ชนิด</th><th>คำอธิบาย</th></tr></thead>
@@ -38,3 +38,4 @@ for (const s of reply.sources) console.log(s.title, s.url);</code></pre>
   <tr><td><code>429</code> (<code>status: "service_error"</code>)</td><td>ผู้ให้บริการ AI ต้นทางใช้งานหนาแน่น <strong>ไม่มี</strong> <code>Retry-After</code> ให้รอสักครู่แล้วลองใหม่ แยกกรณีด้วย <code>err.body.status</code></td></tr>
   <tr><td><code>502</code> / <code>503</code></td><td><code>service_error</code> / <code>service_unavailable</code></td></tr>
 </tbody></table>
+

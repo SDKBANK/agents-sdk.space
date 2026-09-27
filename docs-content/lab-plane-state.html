@@ -1,5 +1,5 @@
 <h1>ระนาบ 2 · State Ownership</h1>
-<p class="lead">หนึ่งการสนทนามีเจ้าของสถานะรายเดียว และคุมขนาดบริบทไม่ให้เกินเพดาน</p>
+<p class="lead">กำหนดเจ้าของสถานะและขนาดบริบท เพื่อให้แต่ละรันทำงานต่อจากข้อมูลชุดเดียวกัน</p>
 <h2>3 แบบให้เลือก</h2>
 <table><thead><tr><th>แบบ</th><th>เจ้าของประวัติ</th><th>ใน SDK</th><th>ข้อควรรู้</th></tr></thead><tbody>
 <tr><td>SDK Session</td><td>แอปของคุณ</td><td><code>session=SQLiteSession(id)</code></td><td>คุมขนาดด้วย compaction</td></tr>
@@ -36,3 +36,4 @@ class StateOwnershipGate:
             return True
         return False</code></pre>
 <p>ต่อที่ <a href="/docs/lab-state-modes">โค้ด 3 แบบและ compaction</a></p>
+

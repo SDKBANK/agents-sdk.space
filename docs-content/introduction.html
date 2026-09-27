@@ -1,5 +1,5 @@
 <h1>การแนะนำ</h1>
-<p class="lead">เอกสารของ <strong>lsupergen-sdk</strong> และ API ของ agents-sdk.space ใช้ SDK ตัวเดียวเรียก AI Chat, สร้างภาพ และตรวจบัญชีจากโค้ดของคุณเองได้ ทั้ง Node.js, Cloudflare Workers และเบราว์เซอร์</p>
+<p class="lead">เลือกงานที่ต้องการทำ ติดตั้ง lsupergen-sdk แล้วใช้ตัวอย่างเชื่อม API เพื่อรับคำตอบ ภาพ และข้อมูลบัญชี</p>
 <div class="cards">
   <a class="card" href="/docs/installation"><strong>ติดตั้ง →</strong><span>npm install lsupergen-sdk แล้วเริ่มได้ทันที</span></a>
   <a class="card" href="/docs/quickstart"><strong>เริ่มต้นใน 5 นาที →</strong><span>จากศูนย์จนได้คำตอบ AI จริงตัวแรก</span></a>
@@ -18,4 +18,5 @@
 const client = new Lsupergen({ baseURL: '{{BASE}}' }); // อ่าน key จาก LSUPERGEN_API_KEY
 const reply = await client.post('/chat', { body: { message: 'สวัสดี' } });
 console.log(reply.message);</code></pre>
-<div class="callout"><p>ทุกคำตอบของ AI มาจากโมเดลจริงของระบบ ถ้าบริการยังไม่พร้อม API จะตอบ <code>503</code> ตรง ๆ ไม่มีคำตอบจำลอง</p></div>
+<div class="callout"><p>อ่าน <code>message</code> เป็นผลลัพธ์ และใช้รหัส HTTP เลือกวิธีจัดการเมื่อคำขอไม่สำเร็จ</p></div>
+

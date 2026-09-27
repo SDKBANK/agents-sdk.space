@@ -1,6 +1,6 @@
 <h1>ระนาบ 4 · Scoped Tool Access</h1>
-<p class="lead">agent เห็นและใช้ได้เฉพาะเครื่องมือที่งานปัจจุบันต้องใช้ แทนการใส่เครื่องมือทั้งหมดลงพรอมต์</p>
-<p>ระบบของคุณเป็นเจ้าของเครื่องมือทั้งหมด Tool Access Broker เลือกชุดเครื่องมือตามระดับของแผน แล้วส่งให้ agent ใช้เฉพาะในรันนั้น</p>
+<p class="lead">จับคู่ระดับของแผนกับชุดเครื่องมือ เพื่อให้ agent เข้าถึงความสามารถที่ตรงกับงาน</p>
+<p>Tool Access Broker จับคู่แผนกับเครื่องมือที่จำเป็น แล้วส่งชุดเครื่องมือให้ agent ใช้ในรันนั้น</p>
 <h2>กลไกใน SDK</h2>
 <table><thead><tr><th>กลไก</th><th>ใช้ทำอะไร</th></tr></thead><tbody>
 <tr><td><code>ToolSearchTool()</code></td><td>ให้โมเดลค้นและโหลดเครื่องมือเมื่อต้องใช้</td></tr>
@@ -35,3 +35,4 @@ class ToolAccessBroker:
             return [restart_production_service]
         return []  # unknown level: grant nothing (fail-closed, R7)</code></pre>
 <p>ถ้าโมเดลเรียกเครื่องมือที่ไม่อยู่ในชุดของงานนั้น SDK จะหยุดด้วย <code>ModelBehaviorError</code></p>
+

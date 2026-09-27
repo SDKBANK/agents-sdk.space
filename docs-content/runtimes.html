@@ -1,5 +1,5 @@
 <h1>Runtime ที่รองรับ</h1>
-<p class="lead">SDK ใช้ <code>fetch</code> มาตรฐาน จึงรันได้ทุกที่ที่มี fetch</p>
+<p class="lead">เลือกตัวอย่างให้ตรงกับ Node.js, Workers หรือเบราว์เซอร์ แล้วตั้งค่า fetch และ environment ให้พร้อมเรียก API</p>
 <h2>Node.js</h2>
 <pre data-title="node.mjs"><code>import { Lsupergen } from 'lsupergen-sdk';
 const client = new Lsupergen({ baseURL: '{{BASE}}' });</code></pre>
@@ -32,3 +32,4 @@ export default {
 <div class="callout warn">
   <p><strong>lsupergen-sdk 0.1.0:</strong> ในเบราว์เซอร์, Workers และ Deno ต้องส่ง <code>fetch: (...args) =&gt; fetch(...args)</code> ไม่งั้นทุกคำขอจะเป็น <code>ConnectionError</code> (Illegal invocation) เวอร์ชัน 0.1.1 ที่แก้บั๊กนี้ยังไม่ publish ขึ้น npm ระหว่างนี้ให้ใช้วิธีข้างบน</p>
 </div>
+

@@ -49,8 +49,8 @@ test('standalone pages use the reference palette across the site', async () => {
 test('published npmjs.sdk-space is identified separately from the API client', async () => {
   const landing = await read('loading.html');
   assert.match(landing, /npmjs\.sdk-space/);
-  assert.match(landing, /Published on npm as 1\.0\.1/);
-  assert.match(landing, /exports npmjsSdkSpace\(\)/);
+  assert.match(landing, /https:\/\/www\.npmjs\.com\/package\/npmjs\.sdk-space/);
+  assert.match(landing, /Explore the package, inspect its exports/);
   assert.match(landing, /lsupergen-sdk/);
 });
 
@@ -65,7 +65,7 @@ test('loading and guide use the opaque black two-mode palette and enlarged intro
     assert.match(html, /\/assets\/theme-modes\.css\?v=2/);
     assert.match(html, /\/assets\/theme-modes\.js\?v=1/);
     assert.match(html, /data-theme-toggle/);
-    assert.match(html, /\/assets\/theme\.css\?v=2/);
+    assert.match(html, /\/assets\/theme\.css\?v=3/);
   }
 
   assert.match(landing, /\.logo-container\s*\{\s*width:\s*88px;\s*height:\s*88px;/);
@@ -151,3 +151,4 @@ test('tools surface contains only usable end-user product capabilities', async (
     assert.equal(html.includes(term), false, `tools.html still exposes developer/unavailable surface: ${term}`);
   }
 });
+

@@ -1,5 +1,5 @@
 <h1>GET /health</h1>
-<p class="lead">ตรวจสถานะ API ไม่ต้องใช้ key</p>
+<p class="lead">ตรวจการเชื่อมต่อและอ่านสถานะบริการ เพื่อเลือกขั้นตอนถัดไปก่อนส่งงาน</p>
 <pre data-title="fetch (ไม่ต้องมี key)"><code>const health = await fetch('{{BASE}}/health').then((r) => r.json());</code></pre>
 <pre data-title="curl"><code>curl -sS {{BASE}}/health</code></pre>
 <pre data-title="SDK (ต้องสร้าง client ด้วย key)"><code>const health = await client.get('/health');</code></pre>
@@ -20,3 +20,4 @@
     <tr><td><code>auth_ready</code></td><td><code>false</code> = สร้างหรือตรวจ key ไม่ได้</td></tr>
   </tbody>
 </table>
+

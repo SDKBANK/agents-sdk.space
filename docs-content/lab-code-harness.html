@@ -1,5 +1,5 @@
 <h1>Harness และ Trace Grader</h1>
-<p class="lead"><code>MinimalAgentHarness.execute_slice()</code> ประกอบทุกระนาบเข้าด้วยกัน</p>
+<p class="lead">ประกอบแต่ละระนาบด้วย execute_slice() แล้วตรวจความครบถ้วนของเหตุการณ์ที่ได้</p>
 <ol class="steps">
 <li>ล้าง ledger แล้วรับสิทธิ์เป็นเจ้าของสถานะ (ระนาบ 2)</li>
 <li><code>action_classifier</code> สร้าง PlanContract (ระนาบ 5)</li>
@@ -218,3 +218,4 @@ async def main() -&gt; None:
 
 if __name__ == &quot;__main__&quot;:
     asyncio.run(main())</code></pre>
+

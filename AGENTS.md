@@ -2,8 +2,8 @@
 
 AI Framework: **LSUPERAGENT Public Workspace Operating Instructions**
 
-Last updated: **2026-09-27T12:57:00+07:00 Asia/Bangkok**
-Last update task: **Add authenticated Exa search at /exa through a Worker function that reads EXA_API_KEY from Cloudflare environment.**
+Last updated: **2026-09-27T20:28:18+07:00 Asia/Bangkok**
+Last update task: **Refresh sitewide editorial copy, compact branding, and optional Kantalad typography.**
 
 This file is the first file every AI agent must read before modifying this repository. It defines the repo memory boundary, write protocol, data contract discipline, and negative constraints.
 
@@ -187,3 +187,12 @@ prompt_stack_loop:
   last_run_task: Align public-entry contract with email/password plus Google/GitHub authentication
   required_action: keep_contract_current_and_write_actual_update
 ```
+
+
+## Editorial contract — 2026-09-27
+
+Build task-oriented page copy so visitors can identify an input, follow an approach, and use the resulting output. Across page shells and docs, lead with reusable steps and outcomes; keep personal biography and internal prohibition/status banners out of product introductions. Preserve operational errors and accurate technical reference details. Use the canonical logo in one or two brand positions per page and compact header names. The intro heading is owner-supplied copy: “React following deveguide by Next.js”; it describes editorial direction, not a migration from the pinned static frontend.
+
+Content fields: heading and lead are static strings sourced from each HTML page; required on content pages. Brand asset is /logo.svg. Font preference is a CSS family from assets/editorial.css and assets/theme.css. Kantalad Cnd Bold is a local-font trial only; no licensed webfont file is present, so other devices use the fallback stack. Code retains monospace. Auth and API contracts are unchanged.
+
+Acceptance: remove the entire AI WORKSPACE intro row; reduce header brand size and spacing; revise all docs introductions toward application and outcome; preserve form IDs, action URLs and runtime scripts. Deployment is unverified until a live check confirms the new revision.
