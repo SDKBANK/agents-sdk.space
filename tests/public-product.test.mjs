@@ -62,14 +62,14 @@ test('loading and guide use the opaque black two-mode palette and enlarged intro
   const script = await read('assets/theme-modes.js');
 
   for (const [name, html] of [['loading.html', landing], ['guide.html', guide]]) {
-    assert.match(html, /\/assets\/theme-modes\.css\?v=1/);
+    assert.match(html, /\/assets\/theme-modes\.css\?v=2/);
     assert.match(html, /\/assets\/theme-modes\.js\?v=1/);
     assert.match(html, /data-theme-toggle/);
     assert.match(html, /\/assets\/theme\.css\?v=2/);
   }
 
   assert.match(landing, /\.logo-container\s*\{\s*width:\s*88px;\s*height:\s*88px;/);
-  assert.match(guide, /guide-core\.css[\s\S]*theme-modes\.css/);
+  assert.match(guide, /guide-core\.css\?v=3[\s\S]*theme-modes\.css\?v=2/);
   assert.match(core, /\.tab\{[^}]*background:#000000!important;opacity:1!important;/);
   assert.match(modes, /html, body, body\.sdk-layout \{ background-color: #000000 !important; \}/);
   assert.match(modes, /\.feature, \.news-card, \.chip, \.step, \.fact, pre,[\s\S]*background: #000000 !important/);
