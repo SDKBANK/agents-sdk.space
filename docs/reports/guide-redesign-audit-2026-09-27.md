@@ -72,3 +72,19 @@ Commit แก้ไข: `0f3dfa8bb5b066ba2c0bd2f97a09151963551ec5`
 Commit แก้ comment: `cd9879c100c5838b6219416084a4d9953e70c6cb`.
 
 ข้อจำกัดที่เหลือ: `/guide` ต้องมี signed session จึงยังไม่ได้ตรวจ computed styles และ interaction ของหน้า Guide ที่ deploy จริง รวมถึง viewport 390px/1280px และ flow `/keys → /guide → Run all`.
+
+
+## Update — CORE SDK electric violet restored
+
+ตรวจ commit `a768ab1ed6657ac7fb4d18d741cc1985f2f372f5` แล้ว พบว่าเปลี่ยน `assets/guide-core.css` โดยตั้งใจคืน electric violet (`#6c21ff`) ให้ visual layer ของ CORE SDK บน `/guide` และลบ mode-specific accent variables ที่เคยเป็น blue-gray/muted purple ออกจากไฟล์นี้
+
+ข้อเท็จจริงจาก CSS cascade ปัจจุบัน:
+
+- `assets/theme-modes.css` ถูกโหลดหลัง `assets/guide-core.css` จึงยังทำให้ปุ่ม Run/Primary ใน Normal mode เป็นพื้นดำตาม selector ที่เฉพาะกว่า
+- ใน Docs mode ปุ่ม `.primary` ของ Guide, focus ring, hover, step number และ selected tabs ใช้ electric violet จาก `guide-core.css`; selected tabs ถูกบังคับเป็น violet ในทั้งสอง mode
+- สีข้อความขาวบน `#6c21ff` มี contrast ประมาณ 6.37:1 และบน hover `#7c32ff` ประมาณ 5.59:1 จึงยังผ่าน WCAG AA สำหรับข้อความปกติ
+- commit นี้ไม่มี GitHub Actions workflow run หรือ commit status ที่รายงานผ่าน GitHub API ณ เวลาตรวจ
+
+ไม่ได้แก้ย้อน เพราะชื่อ commit และชุดการเปลี่ยนแปลงบ่งชี้ว่าเป็น product/brand decision โดยตรง และไม่พบ accessibility regression เชิง contrast จากค่าที่เปลี่ยน อย่างไรก็ตาม ผลลัพธ์นี้ทำให้คำอธิบายก่อนหน้าว่า `/guide` ใช้ Normal blue-gray / Docs muted purple ไม่ครบถ้วนแล้ว
+
+สิ่งที่ควรยืนยันต่อ: product owner ต้องเลือกให้ชัดว่า electric violet เป็น accent เฉพาะ CORE SDK ที่ควร override theme mode หรือ theme mode ต้องควบคุม accent ทั้งหมด; จากนั้นเพิ่ม static test สำหรับ precedence นี้ และตรวจ visual จริงหลัง login ที่ 390px/1280px
