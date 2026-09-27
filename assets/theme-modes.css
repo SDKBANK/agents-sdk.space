@@ -29,4 +29,8 @@ html[data-theme="normal"] button.primary { color: #ffffff !important; background
 html[data-theme="docs"] .theme-toggle-label { color: #b09acb; }
 .topbar, .sdk-site-header { background: #000000 !important; }
 .feature, .news-card, .chip, .step, .fact, pre,
-button[role="tab"], .tab { background-color: #000000 !important; opacity: 1 !important; }
+button[role="tab"], .tab {
+  background: #000000 !important;
+  opacity: 1 !important;
+}
+.news-card:hover { background: #000000 !important; }

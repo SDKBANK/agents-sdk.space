@@ -11,7 +11,7 @@ h1,h2,h3,strong{color:#fff!important}
 p,li,footer,.fact,.badge,th{color:#a7a3b3!important}
 a:hover{color:#fff}
 code{color:#fff!important}
-.step{background:#030304!important;border:1px solid #272330!important;border-radius:12px!important;box-shadow:none!important;transition:border-color 150ms ease,box-shadow 150ms ease,background 150ms ease!important}
+.step{background:#000000!important;border:1px solid #272330!important;border-radius:12px!important;box-shadow:none!important;transition:border-color 150ms ease,box-shadow 150ms ease,background 150ms ease!important}
 .step:hover{border-color:var(--mode-glow-border)!important;box-shadow:0 0 0 1px var(--mode-glow-low),0 0 24px var(--mode-glow-low)!important}
 .step-num{color:var(--mode-accent-soft)!important}
 .fact{background:#000000!important;border-color:#272330!important}

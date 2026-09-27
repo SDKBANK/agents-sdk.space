@@ -72,6 +72,7 @@ test('loading and guide use the opaque black two-mode palette and enlarged intro
   assert.match(guide, /guide-core\.css[\s\S]*theme-modes\.css/);
   assert.match(core, /\.tab\{[^}]*background:#000000!important;opacity:1!important;/);
   assert.match(modes, /html, body, body\.sdk-layout \{ background-color: #000000 !important; \}/);
+  assert.match(modes, /\.feature, \.news-card, \.chip, \.step, \.fact, pre,[\s\S]*background: #000000 !important/);
   assert.match(modes, /html\[data-theme="docs"\][\s\S]*--mode-accent: #70568f/);
   assert.match(script, /lsuperagent-color-mode/);
   assert.match(script, /addEventListener\('click'/);
