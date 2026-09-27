@@ -1,4 +1,4 @@
-/* /guide only — CORE SDK terminal visual layer. Loaded by assets/guide.js after shared theme.css. */
+/* /guide only — CORE SDK terminal visual layer. Loaded by guide.html after shared theme.css. */
 :root{--mode-accent:#91a7bd;--mode-accent-strong:#b2c0ce;--mode-accent-soft:#c5cfda;--mode-glow-low:rgba(145,167,189,.08);--mode-glow-border:rgba(145,167,189,.28);--bg:#000!important;--surface:#030304!important;--line:#272330!important;--line2:#3a3346!important;--text:#fff!important;--muted:#a7a3b3!important;--accent:var(--mode-accent)!important;--ok:#34d399;--bad:#ff7d86;--mono:"SFMono-Regular","JetBrains Mono","Roboto Mono",Consolas,"Liberation Mono",monospace!important}
 html,body{background:#000!important;color:#fff!important}
 body.sdk-layout{background:#000!important;color:#fff!important}
