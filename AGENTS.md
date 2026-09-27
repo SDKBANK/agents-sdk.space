@@ -2,8 +2,8 @@
 
 AI Framework: **LSUPERAGENT Public Workspace Operating Instructions**
 
-Last updated: **2026-09-27T11:24:00+07:00 Asia/Bangkok**
-Last update task: **Set the Loading and SDK Guide surfaces to opaque black with persistent Normal and Docs color modes, then enlarge the Loading logo.**
+Last updated: **2026-09-27T12:57:00+07:00 Asia/Bangkok**
+Last update task: **Add authenticated Exa search at /exa through a Worker function that reads EXA_API_KEY from Cloudflare environment.**
 
 This file is the first file every AI agent must read before modifying this repository. It defines the repo memory boundary, write protocol, data contract discipline, and negative constraints.
 
@@ -32,6 +32,7 @@ worker: lsuperagent-docs
 entrypoint: src/firebase-worker.js -> src/index.js
 frontend: static_html_css_js
 primary_runtime_endpoint: /api/chat
+exa_search_endpoint: POST /api/exa/search (signed session; Cloudflare Worker EXA_API_KEY)
 owner_workspace: /dev
 control_reference: /dev/control-plane/
 control_alias: /control -> /dev
@@ -56,6 +57,8 @@ Code entry contract: `/tools` Code links to `/chat?mode=code`; `assets/chat.js` 
 SDK and docs contract: `/docs/:page` serves `docs-shell.html`, which loads `/docs-content/<slug>` (login required; 401 JSON without a session) using the sidebar list in `assets/docs-nav.js`; adding a page means a new `docs-content/<slug>.html` plus one entry there, and `tests/docs-site.test.mjs` checks both stay in sync. `/guide` is the `lsupergen-sdk` playground (`guide.html`, `assets/guide.js`, vendored npm build under `vendor/lsupergen-sdk/0.1.0/`, sha256 pinned in `tests/sdk-guide.test.mjs`). `POST /api/sdk/keys` (same-origin, signed session) returns a stateless `lsg_` key: an HMAC token signed with `AUTH_SESSION_SECRET`, typ `sdk_key`, 30-day expiry, no storage, not individually revocable. `GET /v1/health` is public; `GET /v1/me`, `POST /v1/chat`, and `POST /v1/image` require `Authorization: Bearer lsg_…` and reuse the `/api/chat` and `/api/image` handlers, including the 10 requests / 10 minutes in-memory rate guard. `/sdk` redirects to `/guide`.
 
 Package boundary: `npmjs.sdk-space@1.0.1` is a separate npm package that currently exports only `npmjsSdkSpace()` as a version-string function. `/guide` remains the `lsupergen-sdk` API client. Do not describe these as interchangeable.
+
+Exa Search contract: `/tools` links to authenticated `/exa`, whose browser form posts `{ query, numResults }` to same-origin `POST /api/exa/search`. The Worker validates query length, clamps results to 1–10, requests Exa highlights, and returns only title, HTTP(S) URL, optional publication date, and up to three highlights per result. `EXA_API_KEY` is read from the Cloudflare Worker environment and never returned to the browser. Requests use the existing per-isolate in-memory limit of 10 per 10 minutes; this is not a durable quota or spend cap. The route is not part of the public `/v1` SDK.
 
 ## Feature Goal Template
 
