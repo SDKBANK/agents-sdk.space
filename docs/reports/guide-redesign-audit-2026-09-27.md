@@ -55,3 +55,20 @@ Commit แก้ไข: `0f3dfa8bb5b066ba2c0bd2f97a09151963551ec5`
 ตรวจค่า contrast ของปุ่มหลังธีมใหม่: ขาวบน `#6c21ff` ประมาณ 6.37:1 และ hover `#7c32ff` ประมาณ 5.59:1 ผ่านเกณฑ์ข้อความปกติ จึงไม่ย้อนการกำหนดสีปุ่มของธีมใหม่
 
 ยังต้องตรวจ visual หลัง deploy ด้วย signed-in session และ viewport 390px/1280px ตามรายการเดิม ไม่มี GitHub Actions run หรือ commit status สำหรับ commit ธีมในเวลาที่ตรวจ
+
+
+## Update — two-mode theme and live verification
+
+ตรวจ commits `b2573ad9156a3a235bd0301731614d6a96ffc191`, `45750bdf2169de6c8ce5673e6204e36890cfc529` และ `8589f754acc6cff193f381601d2727ea0311b9be` แล้ว:
+
+- เพิ่ม Normal/Docs mode ร่วมกันบน `/loading` และ `/guide` ผ่าน `assets/theme-modes.css` และ `assets/theme-modes.js`.
+- ใช้ canvas และ tab/card surfaces เป็น `#000000` แบบ opaque; Normal ใช้ blue-gray และ Docs ใช้ muted purple.
+- เพิ่ม cache-busting version ให้ CSS ที่เปลี่ยน และเพิ่ม static contract tests ใน `tests/public-product.test.mjs`.
+- Production `/loading` ถูกตรวจผ่าน browser จริง: computed body background เป็น `rgb(0, 0, 0)`, logo container เป็น 88×88px, toggle เปลี่ยนจาก Normal ไป Docs ได้, Docs toggle เป็น `rgb(102, 81, 129)` กับตัวอักษรขาว และหลัง reload ยังคง Docs mode อยู่.
+- ยังไม่มี GitHub Actions workflow run หรือ commit status สำหรับ commit ล่าสุด จึงถือว่า static tests มีอยู่ใน source แต่ยังไม่มี CI execution evidence.
+
+แก้ factual error ใน comment ของ `assets/guide-core.css`: ไฟล์ถูกโหลดโดย `guide.html` ไม่ใช่ `assets/guide.js`.
+
+Commit แก้ comment: `cd9879c100c5838b6219416084a4d9953e70c6cb`.
+
+ข้อจำกัดที่เหลือ: `/guide` ต้องมี signed session จึงยังไม่ได้ตรวจ computed styles และ interaction ของหน้า Guide ที่ deploy จริง รวมถึง viewport 390px/1280px และ flow `/keys → /guide → Run all`.
