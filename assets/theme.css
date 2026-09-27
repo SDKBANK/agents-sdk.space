@@ -1,68 +1,88 @@
-/* Reference palette: ink, warm copper edge, and a restrained violet rim. */
+/* Shared black canvas; page controls select a restrained normal or Docs accent. */
 :root {
   color-scheme: dark;
-  --bg: #090a12 !important;
-  --surface: #10111c !important;
-  --surface-2: #171725 !important;
-  --surface2: #171725 !important;
-  --line: #302c3b !important;
-  --line-2: #474050 !important;
-  --line2: #474050 !important;
-  --text: #f2edf1 !important;
-  --fg: #f2edf1 !important;
-  --muted: #ada4b2 !important;
-  --fg2: #ada4b2 !important;
-  --accent: #e9a077 !important;
-  --acc: #e9a077 !important;
-  --acc2: #f4bc91 !important;
-  --focus: #e9a077 !important;
-  --accent-soft: rgba(233,160,119,.14) !important;
-  --accm: rgba(233,160,119,.14) !important;
-  --canvas: #090a12 !important; --surface-elevated: #151521 !important; --surface-inset: #0d0e18 !important;
-  --carbon-950: #090a12 !important; --carbon-900: #0d0e18 !important; --carbon-850: #10111c !important;
-  --carbon-800: #151521 !important; --carbon-750: #191925 !important; --carbon-700: #201c2b !important;
-  --graphite-600: #292534 !important; --graphite-500: #383141 !important;
-  --line-800: #302c3b !important; --line-700: #474050 !important; --line-600: #5b5162 !important;
-  --fg-primary: #f2edf1 !important; --fg-secondary: #ada4b2 !important; --fg-muted: #8f8494 !important;
-  --accent-strong: #f4bc91 !important; --accent-muted: rgba(233,160,119,.14) !important;
-  --border-subtle: #302c3b !important; --border-default: #474050 !important; --border-strong: #5b5162 !important;
-  --c950: #090a12 !important; --c900: #0d0e18 !important;
-  --c850: #10111c !important; --c800: #151521 !important;
-  --c750: #191925 !important; --c700: #201c2b !important;
-  --g600: #292534 !important; --g500: #383141 !important;
-  --l800: #302c3b !important; --l700: #474050 !important;
-  --l600: #5b5162 !important;
+  --bg: #000000 !important;
+  --surface: #08090b !important;
+  --surface-2: #0d0f12 !important;
+  --surface2: #0d0f12 !important;
+  --line: #202328 !important;
+  --line-2: #30353c !important;
+  --line2: #30353c !important;
+  --text: #ffffff !important;
+  --fg: #ffffff !important;
+  --muted: #a3aab3 !important;
+  --fg2: #a3aab3 !important;
+  --accent: #91a7bd !important;
+  --acc: #91a7bd !important;
+  --acc2: #b2c0ce !important;
+  --focus: #91a7bd !important;
+  --accent-soft: rgba(145,167,189,.12) !important;
+  --accm: rgba(145,167,189,.12) !important;
+  --canvas: #000000 !important; --surface-elevated: #08090b !important; --surface-inset: #030405 !important;
+  --carbon-950: #000000 !important; --carbon-900: #030405 !important; --carbon-850: #08090b !important;
+  --carbon-800: #0d0f12 !important; --carbon-750: #111317 !important; --carbon-700: #171a1e !important;
+  --graphite-600: #202328 !important; --graphite-500: #30353c !important;
+  --line-800: #202328 !important; --line-700: #30353c !important; --line-600: #454b53 !important;
+  --fg-primary: #ffffff !important; --fg-secondary: #a3aab3 !important; --fg-muted: #808892 !important;
+  --accent-strong: #b2c0ce !important; --accent-muted: rgba(145,167,189,.12) !important;
+  --border-subtle: #202328 !important; --border-default: #30353c !important; --border-strong: #454b53 !important;
+  --c950: #000000 !important; --c900: #030405 !important;
+  --c850: #08090b !important; --c800: #0d0f12 !important;
+  --c750: #111317 !important; --c700: #171a1e !important;
+  --g600: #202328 !important; --g500: #30353c !important;
+  --l800: #202328 !important; --l700: #30353c !important;
+  --l600: #454b53 !important;
 }
-html, body { background-color: #090a12 !important; }
-body { color: #f2edf1; }
+html, body { background-color: #000000 !important; }
+body { color: #ffffff; }
 :is(.topbar, .sdk-site-header, .shell-header, .app-header, .site-header, .header, .sidebar, .toc, .mode-panel, .shell-mobile-panel) {
-  background-color: #10101b !important;
-  border-color: #302c3b !important;
+  background-color: #000000 !important;
+  border-color: #202328 !important;
 }
 :is(.card, .feature, .tool-card, .panel, .step, .composer, .message-body, .fact, .pill, .search-box, .code, .terminal, .window, .login, .view) {
-  border-color: #383241;
+  border-color: #30353c;
 }
 :is(.card, .feature, .tool-card, .panel, .step, .composer, .message-body, .search-box, .terminal, .window) {
-  background-color: #11121d;
+  background-color: #08090b;
 }
-:is(.card, .feature, .tool-card, .panel, .step, .terminal, .window):hover { border-color: #b47a67; }
-:is(a, button, input, textarea, select):focus-visible { outline-color: #e9a077 !important; }
-::selection { background: #a86157; color: #fff; }
+:is(.card, .feature, .tool-card, .panel, .step, .terminal, .window):hover { border-color: #526273; }
+:is(a, button, input, textarea, select):focus-visible { outline-color: #91a7bd !important; }
+::selection { background: #354555; color: #fff; }
 :where(input, textarea, select) { color-scheme: dark; }
-:where(pre, .code pre, .content pre) { background-color: #0c0c16; }
-:where(.btn-primary, button.primary, button.run, .send-button, .primary) { border-color: #e9a077; }
-/* Keep the reference's glow at the edges and away from body copy. */
-:is(.sdk-site-header, .topbar) { box-shadow: inset 0 1px 0 rgba(233,160,119,.18), 0 5px 24px rgba(100,54,118,.10); }
-.cw {
-  --cw-bg: #0b0b14; --cw-bar: #13121e; --cw-line: #433849;
-  --cw-dim: #837888; --cw-text: #e7dee5; --cw-accent: #e9a077;
-  box-shadow: 0 18px 44px -18px rgba(0,0,0,.88), 0 0 25px rgba(139,85,151,.17), inset 0 1px 0 rgba(233,160,119,.23);
+:where(pre, .code pre, .content pre) { background-color: #000000; }
+:where(.btn-primary, button.primary, button.run, .send-button, .primary) { border-color: #91a7bd; }
+.theme-toggle {
+  flex: none; border: 1px solid #30353c; border-radius: 8px; padding: 7px 10px;
+  color: #d6dce2; background: #000000; font: inherit; font-size: .72rem; line-height: 1; font-weight: 700; cursor: pointer;
 }
-.cw-tab { background: #191724; box-shadow: 0 -6px 16px -8px rgba(233,160,119,.65); }
-.cw-gutter { border-right-color: #292433; color: #746b7d; }
-.cw-status { background: #100f18; }
-.tk-keyword, .tk-def { color: #e9a077; }
+.theme-toggle:hover { border-color: #526273; color: #ffffff; }
+.theme-toggle:focus-visible { outline: 2px solid #91a7bd; outline-offset: 2px; }
+.theme-toggle-label { color: #a3aab3; font-weight: 600; }
+:is(.tab, [role="tab"]) { background-color: #000000 !important; opacity: 1 !important; }
+[data-theme="docs"] {
+  --accent: #70568f !important; --acc: #70568f !important; --acc2: #9276b3 !important;
+  --focus: #9276b3 !important; --accent-strong: #9276b3 !important;
+  --accent-soft: rgba(112,86,143,.14) !important; --accm: rgba(112,86,143,.14) !important;
+  --accent-muted: rgba(112,86,143,.14) !important;
+  --line: #28242e !important; --line-800: #28242e !important; --line-700: #393341 !important;
+  --line-2: #393341 !important; --line2: #393341 !important; --border-subtle: #28242e !important;
+  --border-default: #393341 !important; --border-strong: #51465e !important;
+  --graphite-600: #28242e !important; --graphite-500: #393341 !important;
+  --l800: #28242e !important; --l700: #393341 !important; --l600: #51465e !important;
+}
+[data-theme="docs"] :is(a, button, input, textarea, select):focus-visible { outline-color: #9276b3 !important; }
+[data-theme="docs"] .theme-toggle { border-color: #393341; }
+[data-theme="docs"] .theme-toggle:hover { border-color: #70568f; }
+.cw {
+  --cw-bg: #050607; --cw-bar: #090a0c; --cw-line: #30353c;
+  --cw-dim: #838b95; --cw-text: #e7ebef; --cw-accent: #91a7bd;
+  box-shadow: 0 18px 44px -18px rgba(0,0,0,.88), inset 0 1px 0 rgba(145,167,189,.07);
+}
+.cw-tab { background: #000000; box-shadow: none; }
+.cw-gutter { border-right-color: #202328; color: #747c86; }
+.cw-status { background: #030405; }
+.tk-keyword, .tk-def { color: #91a7bd; }
 .tk-string { color: #a7c894; }
-.tk-func { color: #c6a1df; }
-.tk-type, .tk-property, .tk-flag { color: #b7c3dc; }
-.tk-constant, .tk-number, .tk-variable { color: #eec67b; }
+.tk-func { color: #a9b5c4; }
+.tk-type, .tk-property, .tk-flag { color: #b2c0ce; }
+.tk-constant, .tk-number, .tk-variable { color: #c7bd9c; }

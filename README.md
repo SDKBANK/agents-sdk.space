@@ -2,8 +2,8 @@
 
 AI Framework: **LSUPERAGENT public AI workspace**
 
-Last updated: **2026-09-26T21:26:00+07:00 Asia/Bangkok**
-Last update task: **Apply the copper/violet reference palette across pages and identify the separate npmjs.sdk-space package by its published contents.**
+Last updated: **2026-09-27T11:24:00+07:00 Asia/Bangkok**
+Last update task: **Give /loading and /guide an opaque black canvas with persistent Normal and Docs color modes; enlarge the Loading logo.**
 
 The proposed one-owner session continuity system is specified in [`docs/session-continuity-pilot.md`](docs/session-continuity-pilot.md). It is design-only; no database or resumable chat runtime has been created.
 
@@ -35,7 +35,7 @@ Agents working in this repository must treat this stack as pinned unless the own
 | Control-plane reference | `/dev/control-plane/` |
 | Route decision | `/control` redirects to `/dev` |
 | Database/storage | No D1/R2/KV binding currently; session history requires a durable store and migration |
-| Design base | Supplied BASE-CLAUDE black/white login and chat views |
+| Design base | Opaque #000000 canvas; Normal black/white with restrained blue-gray accent; Docs black with muted purple accent |
 | Deployment rule | Do not claim live/deployed without verifiable evidence |
 
 ### 2. Feature Goal
@@ -43,6 +43,8 @@ Agents working in this repository must treat this stack as pinned unless the own
 Build a public AI Workspace so authenticated users can safely use real AI capabilities without an anonymous access path, with `/login` as the public entry surface.
 
 The public auth pages are `login.html`, `signup.html`, and `forgot-password.html`. Brand links on `/login` and `/home` open the public `/loading` intro page adapted from the supplied HTML. Its primary action goes through `/` to `/login` or `/home` according to the signed session; the chat action uses the guarded `/chat`. The header and lower Docs action use `/docs`; the lower SDK action uses `/guide`. Its news cards link to external publisher pages and are static links, not a live feed. Successful sign-in and the authenticated root default to `/home`; direct links to `/chat` remain available. Authenticated `/home` links to `/chat`, `/tools`, `/docs`, and `/guide`. The docs site (`docs-shell.html`, `assets/docs*.{js,css}`, `docs-content/*.html`) and its content route `/docs-content/*` require the signed session. `assets/chat.js` checks `/api/auth/session` and sends conversation to `POST /api/chat`. Google and GitHub callbacks remain `/auth/google/callback` and `/auth/github/callback`. GitHub login uses `read:user user:email` only; it does not authorize repository writes or save a GitHub access token.
+
+The public `/loading` intro and authenticated `/guide` expose a persistent two-mode color switch. Both use fully opaque `#000000` page and tab backgrounds. Normal mode uses white text and a restrained blue-gray accent (`#91A7BD`); Docs mode uses black with muted purple (`#70568F`). The selected mode is stored in browser local storage. The Loading logo uses the existing `/logo.svg` asset at 88×88 CSS pixels.
 
 ### 3. Data Contract
 
@@ -60,6 +62,7 @@ Every feature or page must declare its data contract before implementation.
 | `secret_values_exposed` | boolean | API response/docs statement | Must be `false` for any public or docs-only surface. |
 | `authenticated` | boolean | signed session cookie verification | Must be `true` before `/chat`, `/tools`, `/api/chat`, or `/api/image` are available. |
 | `intro_links` | static URLs | `loading.html` | Brand route `/loading`, session-aware CTA `/`, guarded `/chat`, guarded `/docs` and `/guide`, and external news sources. |
+| `color_mode` | enum `normal`, `docs` | `assets/theme-modes.js` local storage preference | Sets accent colors while keeping page and tab canvases opaque black. |
 | `return_to` | relative path | login query/state | Must remain an internal, safe path and defaults to `/home`; explicit `/chat` is preserved. |
 | `mode` | enum `chat`, `code` | `/chat` query and `assets/chat.js` request | Code entry sends `tool: "code"` to the Worker. |
 | `docs_page` | slug `[a-z0-9-]+` | `/docs/:page`, `assets/docs-nav.js` | Must have a matching `docs-content/<slug>.html`; unknown slugs render a not-found message. |
@@ -81,6 +84,8 @@ And no secret, token, OAuth client secret, API key, signed URL, or private crede
 And no unrelated framework is introduced without owner approval
 And no page claims "coming soon" as a substitute for a real state
 And no page claims live production behavior unless verified
+And /loading and /guide render on opaque #000000 canvases in either saved color mode
+And the selected color mode persists between /loading and /guide without changing route or auth behavior
 And anonymous users are redirected from the workspace to `/login`
 And the public login offers a working Google OAuth entry
 And the chat calls `/api/auth/session` and `/api/chat` using the existing signed session

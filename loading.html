@@ -19,9 +19,12 @@
       --text: #ededed;
       --muted: #a1a1a1;
       --dim: #6b6b6b;
-      --accent: #e9a077;
+      --accent: var(--mode-accent);
       --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
       --max: 1080px;
+      --mode-accent: #91a7bd;
+      --mode-accent-strong: #b2c0ce;
+      --mode-glow: rgba(145, 167, 189, .055);
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
@@ -41,7 +44,7 @@
     /* Top bar */
     .topbar {
       position: sticky; top: 0; z-index: 10;
-      background: rgba(0, 0, 0, .94);
+      background: #000000;
       border-bottom: 1px solid var(--line);
       transform: translateZ(0);
     }
@@ -52,7 +55,7 @@
     .topnav { display: flex; align-items: center; gap: 16px; font-size: 13px; color: var(--muted); }
     .topnav a:hover { color: var(--text); }
     .topnav .login { color: var(--text); border: 1px solid var(--line-2); border-radius: 8px; padding: 6px 12px; }
-    .topnav .login:hover { background: var(--surface-2); }
+    .topnav .login:hover { background: #000000; }
 
     /* Hero */
     .hero { position: relative; border-bottom: 1px solid var(--line); overflow: hidden; }
@@ -68,13 +71,13 @@
     }
     .hero::after {
       content: ""; position: absolute; left: 50%; top: -120px; width: 520px; height: 340px; transform: translateX(-50%);
-      background: radial-gradient(closest-side, rgba(233, 160, 119, .18), transparent);
+      background: radial-gradient(closest-side, var(--mode-glow), transparent);
       pointer-events: none;
     }
     .hero .wrap { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; text-align: center; padding-top: 56px; padding-bottom: 60px; }
-    .logo-container { width: 52px; height: 52px; margin-bottom: 20px; }
+    .logo-container { width: 88px; height: 88px; margin-bottom: 22px; }
     .logo-container img { width: 100%; height: 100%; }
-    .eyebrow { font: 600 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line-2); border-radius: 999px; padding: 5px 11px; margin-bottom: 18px; background: rgba(10, 10, 10, .7); }
+    .eyebrow { font: 600 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line-2); border-radius: 999px; padding: 5px 11px; margin-bottom: 18px; background: rgba(0, 0, 0, 1); }
     .hero h2 { font-size: clamp(28px, 7vw, 48px); line-height: 1.12; font-weight: 700; letter-spacing: -.035em; max-width: 820px; }
     .hero h2 em { font-style: normal; background: linear-gradient(180deg, #fff, #9a9a9a); -webkit-background-clip: text; background-clip: text; color: transparent; }
     .en-text { margin-top: 14px; font-size: 13px; color: var(--dim); letter-spacing: .02em; }
@@ -105,13 +108,13 @@
     .feature p { font-size: 13px; line-height: 1.55; color: var(--muted); }
     .feature .go { position: absolute; top: 14px; right: 14px; color: var(--dim); font-size: 15px; transition: transform .2s ease, color .2s ease; }
     a.feature:hover .go { color: var(--text); transform: translate(2px, -2px); }
-    .feature.highlight { background: radial-gradient(120% 120% at 100% 0%, rgba(233, 160, 119, .16), transparent 55%), var(--surface); border-color: #263244; }
+    .feature.highlight { background: radial-gradient(120% 120% at 100% 0%, var(--mode-glow), transparent 55%), var(--surface); border-color: #263244; }
     .feature.highlight h3 { font-size: 17px; }
 
     /* Stack diagram */
     .stack { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 40px; }
     .stack-core { display: flex; justify-content: center; margin-bottom: -28px; position: relative; z-index: 1; }
-    .chip { font: 600 12px var(--mono); letter-spacing: .04em; border: 1px solid var(--line-2); border-radius: 9px; background: var(--surface-2); padding: 9px 14px; box-shadow: 0 0 0 6px #000, 0 0 40px rgba(233, 160, 119, .18); }
+    .chip { font: 600 12px var(--mono); letter-spacing: .04em; border: 1px solid var(--line-2); border-radius: 9px; background: var(--surface-2); padding: 9px 14px; box-shadow: 0 0 0 6px #000, 0 0 40px var(--mode-glow); }
     .chip span { color: var(--accent); }
     .rail { height: 28px; width: 1px; margin: 0 auto; background: linear-gradient(var(--line-2), transparent); }
     .stack .feature { min-height: 0; }
@@ -171,7 +174,8 @@
     @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
   </style>
 <link rel="stylesheet" href="/assets/layout.css?v=1">
-<link rel="stylesheet" href="/assets/theme.css?v=1"></head>
+<link rel="stylesheet" href="/assets/theme.css?v=2">
+<link rel="stylesheet" href="/assets/theme-modes.css?v=1"></head>
 <body class="sdk-layout sdk-standard">
   <header class="topbar sdk-site-header">
     <div class="wrap sdk-frame sdk-header-row">
@@ -180,6 +184,7 @@
         <a class="hide-sm" href="#features">Features</a>
         <a class="hide-sm" href="#start">Get started</a>
         <a class="login" href="/docs">Docs</a>
+        <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false">DOCS MODE</button>
       </nav>
     </div>
   </header>
@@ -375,6 +380,7 @@ const reply = await client.post('/chat', { body: { message: 'Hello' } });</code>
       <p class="creator">Created by a real user, building an AI system from a single mobile phone.</p>
     </div>
   </footer>
+  <script src="/assets/theme-modes.js?v=1" defer></script>
   <script type="module" src="/assets/code-window.js"></script>
 </body>
 </html>

@@ -37,13 +37,13 @@ test('public chat uses the supplied playground with a signed-session API client'
 test('standalone pages use the reference palette across the site', async () => {
   const { readdir } = await import('node:fs/promises');
   const theme = await read('assets/theme.css');
-  assert.match(theme, /--bg: #090a12 !important/);
-  assert.match(theme, /--accent: #e9a077 !important/);
+  assert.match(theme, /--bg: #000000 !important/);
+  assert.match(theme, /--accent: #91a7bd !important/);
   for (const name of await readdir(new URL('..', import.meta.url))) {
     if (!name.endsWith('.html')) continue;
-    assert.match(await read(name), /\/assets\/theme\.css\?v=1/, `${name} has no shared palette`);
+    assert.match(await read(name), /\/assets\/theme\.css\?v=\d+/,  `${name} has no shared palette`);
   }
-  assert.match(await read('dev/control-plane/index.html'), /\/assets\/theme\.css\?v=1/);
+  assert.match(await read('dev/control-plane/index.html'), /\/assets\/theme\.css\?v=\d+/);
 });
 
 test('published npmjs.sdk-space is identified separately from the API client', async () => {
@@ -52,6 +52,29 @@ test('published npmjs.sdk-space is identified separately from the API client', a
   assert.match(landing, /Published on npm as 1\.0\.1/);
   assert.match(landing, /exports npmjsSdkSpace\(\)/);
   assert.match(landing, /lsupergen-sdk/);
+});
+
+test('loading and guide use the opaque black two-mode palette and enlarged intro logo', async () => {
+  const landing = await read('loading.html');
+  const guide = await read('guide.html');
+  const core = await read('assets/guide-core.css');
+  const modes = await read('assets/theme-modes.css');
+  const script = await read('assets/theme-modes.js');
+
+  for (const [name, html] of [['loading.html', landing], ['guide.html', guide]]) {
+    assert.match(html, /\/assets\/theme-modes\.css\?v=1/);
+    assert.match(html, /\/assets\/theme-modes\.js\?v=1/);
+    assert.match(html, /data-theme-toggle/);
+    assert.match(html, /\/assets\/theme\.css\?v=2/);
+  }
+
+  assert.match(landing, /\.logo-container\s*\{\s*width:\s*88px;\s*height:\s*88px;/);
+  assert.match(guide, /guide-core\.css[\s\S]*theme-modes\.css/);
+  assert.match(core, /\.tab\{[^}]*background:#000000!important;opacity:1!important;/);
+  assert.match(modes, /html, body, body\.sdk-layout \{ background-color: #000000 !important; \}/);
+  assert.match(modes, /html\[data-theme="docs"\][\s\S]*--mode-accent: #70568f/);
+  assert.match(script, /lsuperagent-color-mode/);
+  assert.match(script, /addEventListener\('click'/);
 });
 
 test('worker enables real web research and URL reading with returned sources', async () => {
