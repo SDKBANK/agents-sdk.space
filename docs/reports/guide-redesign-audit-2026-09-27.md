@@ -88,3 +88,19 @@ Commit แก้ comment: `cd9879c100c5838b6219416084a4d9953e70c6cb`.
 ไม่ได้แก้ย้อน เพราะชื่อ commit และชุดการเปลี่ยนแปลงบ่งชี้ว่าเป็น product/brand decision โดยตรง และไม่พบ accessibility regression เชิง contrast จากค่าที่เปลี่ยน อย่างไรก็ตาม ผลลัพธ์นี้ทำให้คำอธิบายก่อนหน้าว่า `/guide` ใช้ Normal blue-gray / Docs muted purple ไม่ครบถ้วนแล้ว
 
 สิ่งที่ควรยืนยันต่อ: product owner ต้องเลือกให้ชัดว่า electric violet เป็น accent เฉพาะ CORE SDK ที่ควร override theme mode หรือ theme mode ต้องควบคุม accent ทั้งหมด; จากนั้นเพิ่ม static test สำหรับ precedence นี้ และตรวจ visual จริงหลัง login ที่ 390px/1280px
+
+
+## Update — sitewide editorial refresh and stale palette assertion
+
+ตรวจ commit `8a8e3a7cb167ac3eb60d283fa25173411f2fcc96` ซึ่งปรับข้อความและ compact branding ทั่วเว็บ รวมถึง `/guide`:
+
+- `guide.html` ยังโหลด `guide-core.css?v=3` ก่อน `theme-modes.css?v=2` และยังคง IDs/scripts ที่ใช้กับการทดสอบจริง
+- เปลี่ยนข้อความนำของ Guide ให้เน้นขั้นตอนและผลลัพธ์ และเพิ่ม `assets/editorial.css?v=1`; contract ของ auth/API ไม่ได้เปลี่ยน
+- ผู้ทำ commit รายงาน targeted checks ผ่าน 33/34 และยังไม่ได้ตรวจ browser/live deployment
+- ข้อที่ล้มเกิดจาก test บังคับ literal `background:#000000` แต่ `assets/guide-core.css` ใช้ shorthand `background:#000` ซึ่งเป็นค่าสีเดียวกัน ไม่ใช่ visual regression
+
+แก้ assertion ใน `tests/public-product.test.mjs` ให้ยอมรับทั้ง `#000` และ `#000000` โดยยังคงตรวจ `!important` และ opacity เดิม
+
+Commit แก้ test: `dff72afbb3423cf92d9663c4b01c531d3c69c8fe`.
+
+ยังไม่มี GitHub Actions workflow run หรือ commit status สำหรับ editorial commit; การตรวจ browser หลัง login ที่ 390px/1280px และ flow `/keys → /guide → Run all` ยังเป็นข้อจำกัดเดิม
