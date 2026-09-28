@@ -362,9 +362,13 @@
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ message: text, messages: turns, mode, stream: true, ...(conversationId ? { conversation_id: conversationId } : {}), ...(files.length ? { attachments: files.map(({ name, data }) => ({ name, data })) } : {}), ...(mode === 'code' ? { tool: 'code' } : {}) }),
       });
+      // Prefer the daily account quota; fall back to the short burst guard when no quota applies (e.g. owner).
+      const dailyLeft = response.headers.get('x-lsuperagen-quota-remaining');
+      const dailyLimit = response.headers.get('x-lsuperagen-quota-limit');
       const remaining = response.headers.get('x-lsuperagen-rate-remaining');
       const limit = response.headers.get('x-lsuperagen-rate-limit');
-      if (remaining !== null && limit) quota.textContent = 'เหลือในรอบนี้ ' + remaining + '/' + limit;
+      if (dailyLeft !== null && dailyLimit) quota.textContent = 'วันนี้เหลือ ' + dailyLeft + '/' + dailyLimit + ' ข้อความ';
+      else if (remaining !== null && limit) quota.textContent = 'เหลือในรอบนี้ ' + remaining + '/' + limit;
       if (!response.ok || !(response.headers.get('content-type') || '').includes('ndjson')) {
         const result = await response.json().catch(() => ({}));
         wait.remove();
@@ -429,7 +433,7 @@
       answerNode.textContent = answer;
       const label = document.createElement('span');
       label.className = 'meta';
-      label.textContent = 'AI';
+      label.textContent = final.truncated ? 'AI · คำตอบยาวเกินกำหนด ระบบตัดไว้ พิมพ์ "ต่อ" เพื่อให้ตอบส่วนที่เหลือ' : 'AI';
       answerNode.append(label);
       chat.scrollTop = chat.scrollHeight;
     } catch (_) {

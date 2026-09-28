@@ -2,12 +2,12 @@
 
 AI Framework: **LSUPERAGENT public AI workspace**
 
-Last updated: **2026-09-29T01:20:31+07:00 Asia/Bangkok**
-Last update task: **Stream /chat answers, save per-account chat history in D1 (agentssdkspace, binding DB), and accept image/PDF attachments on /api/chat.**
+Last updated: **2026-09-29T03:15:28+07:00 Asia/Bangkok**
+Last update task: **Add a per-account daily quota in D1 (50 chat messages, 10 images, 2000 site-wide; reset 00:00 Thai time) and deliver answers cut off at the output cap flagged truncated.**
 
 The proposed one-owner session continuity system is specified in [`docs/session-continuity-pilot.md`](docs/session-continuity-pilot.md). Signed-in chat history now persists in D1 (see Chat contract below); the rest of that continuity design is not built.
 
-Feature goal: Build a Code chat entry so the signed-in owner can ask for code and receive a code-oriented AI response, with no claim that the page edits GitHub files. `/tools` links to `/chat?mode=code`; `assets/chat.js` sends `mode: "code"` and `tool: "code"` to `/api/chat`. The result is text in the chat. It is not a repository editor or a verified live-model end-to-end run. The current rate guard allows 10 requests in 10 minutes per IP and tool in a Worker isolate's memory; it is neither a durable per-user quota nor a spend cap. Answers stream as NDJSON; signed-in chats are saved per account in D1 and reopen from the History panel or `?c=`.
+Feature goal: Build a Code chat entry so the signed-in owner can ask for code and receive a code-oriented AI response, with no claim that the page edits GitHub files. `/tools` links to `/chat?mode=code`; `assets/chat.js` sends `mode: "code"` and `tool: "code"` to `/api/chat`. The result is text in the chat. It is not a repository editor or a verified live-model end-to-end run. Each account gets a daily quota stored in D1: 50 chat messages (a message with attachments counts 2) and 10 generated images, plus a site-wide cap of 2000 units; it resets at 00:00 Thai time and the owner is exempt. An in-memory burst guard (10 requests per 10 minutes per IP and tool) still applies. Answers cut off at the output-token cap are shown with a note instead of being dropped. Answers stream as NDJSON; signed-in chats are saved per account in D1 and reopen from the History panel or `?c=`.
 
 Exa Search: `/tools` links to authenticated `/exa`. It calls `POST /api/exa/search`; the Cloudflare Worker reads `EXA_API_KEY` from its environment and makes the Exa request server-side. Set `EXA_API_KEY` as a Worker secret to enable search. The browser never receives the key. Search is login-gated and the Worker rate limit is temporary, not a spend cap.
 
@@ -69,7 +69,9 @@ Every feature or page must declare its data contract before implementation.
 | `mode` | enum `chat`, `code` | `/chat` query and `assets/chat.js` request | Code entry sends `tool: "code"` to the Worker. |
 | `docs_page` | slug `[a-z0-9-]+` | `/docs/:page`, `assets/docs-nav.js` | Must have a matching `docs-content/<slug>.html`; unknown slugs render a not-found message. |
 | `api_key` | string `lsg_…` | `POST /api/sdk/keys` | Stateless signed token, 30-day expiry, shown once; never stored or logged. |
-| `quota_remaining` | number or unavailable | `/api/chat` rate headers | Shows only the current isolate's temporary rate count after a successful response. |
+| `quota_remaining` | number or unavailable | `/api/chat` headers `x-lsuperagen-quota-remaining` / `-limit` / `-reset` | Today's remaining units for the signed-in account (D1). Absent for the owner or without D1; the page then falls back to the burst-guard count. |
+| `quota_exceeded` | 429 response, `status` value | `/api/chat`, `/api/image`, `/v1/chat`, `/v1/image` | Daily limit reached (`reset_at` = next 00:00 Asia/Bangkok, plus `retry-after`). No provider call is made. |
+| `truncated` | boolean, response only | `/api/chat` response / `done` event | `true` when the answer stopped at the output-token cap; the partial answer is real and is shown with a "type 'ต่อ' to continue" note. |
 | `stream` | boolean, optional | `/api/chat` request body, `assets/chat.js` | `true` returns `application/x-ndjson` (`delta`* then one `done` or `error`); omitted keeps the single JSON response. |
 | `conversation_id` | string `c_` + 32 hex, optional | `/api/chat` request and response, `src/chat-store.js` | Request: continue that conversation only if the caller owns it. Response: present only when the exchange was saved. |
 | `history_saved` | boolean, response only | `/api/chat` response / `done` event | Present only for signed-in `/api/chat` with D1 bound; `false` means the answer is real but was not stored. |
@@ -108,7 +110,7 @@ And /dev/control-plane/ remains docs/reference unless explicitly changed
 Agents must not do the following:
 
 - Do not push unrelated templates into `main`.
-- Do not migrate auth or platforms to Supabase/Vercel/Railway without a current owner instruction. D1 is approved by the owner (2026-09-28) for chat history and a planned per-account rate limit; `agentssdkspace` is bound as `DB`.
+- Do not migrate auth or platforms to Supabase/Vercel/Railway without a current owner instruction. D1 is approved by the owner (2026-09-28) for chat history and the per-account daily quota; `agentssdkspace` is bound as `DB`.
 - Do not overwrite `index.html` with generic landing-page templates.
 - Do not change `/control` away from `/dev` unless the owner explicitly changes route policy.
 - Do not expose secrets or ask the owner to paste secrets into chat.
