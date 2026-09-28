@@ -136,3 +136,24 @@ test('the attachment note is dropped when it would push a history turn past 12,0
   const userRow = saved.find((row) => /INSERT INTO messages/.test(row.sql) && row.params[1] === 'user');
   assert.equal(userRow.params[2], longText);
 });
+
+test('an oversized chat body is refused with 413 before parsing or calling a provider', async () => {
+  const huge = 'data:image/png;base64,' + 'A'.repeat(29 * 1024 * 1024);
+  const { response, payloads } = await capture(() => chat({ message: 'q', attachments: [{ name: 'huge.png', data: huge }] }));
+  assert.equal(response.status, 413);
+  assert.equal((await response.json()).status, 'payload_too_large');
+  assert.equal(payloads.length, 0);
+});
+
+test('invalid attachment requests count against the rate limit', async () => {
+  const cookie = await sessionCookie();
+  const send = () => worker.fetch(new Request('https://agents-sdk.space/api/chat', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'cf-connecting-ip': '198.18.0.77', cookie },
+    body: JSON.stringify({ message: 'q', attachments: [{ name: 'x.svg', data: 'data:image/svg+xml;base64,PHN2Zz4=' }] })
+  }), { OPENAI_API_KEY: 'k', AUTH_SESSION_SECRET: SESSION_SECRET });
+  const statuses = [];
+  for (let i = 0; i < 11; i += 1) statuses.push((await send()).status);
+  assert.deepEqual(statuses.slice(0, 10), Array(10).fill(400));
+  assert.equal(statuses[10], 429);
+});

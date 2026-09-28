@@ -136,23 +136,37 @@
     reader.readAsDataURL(blob);
   });
 
-  async function prepareImage(file) {
-    if (file.type === 'image/gif' && file.size <= 2 * 1024 * 1024) return readDataUrl(file);
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(bitmap.width, bitmap.height));
-    if (scale === 1 && file.size <= 1024 * 1024 && file.type !== 'image/gif') {
-      bitmap.close();
-      return readDataUrl(file);
-    }
+  function drawJpeg(bitmap, maxSide, quality) {
+    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement('canvas');
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close();
-    return canvas.toDataURL('image/jpeg', 0.85);
+    return canvas.toDataURL('image/jpeg', quality);
+  }
+
+  // Returns the upload data plus a small thumbnail for the page, so full-size data is not kept in the DOM.
+  // GIFs are always flattened to one frame: vision models reject animated GIFs.
+  async function prepareImage(file, type) {
+    const bitmap = await createImageBitmap(file);
+    try {
+      const small = Math.max(bitmap.width, bitmap.height) <= MAX_IMAGE_SIDE && file.size <= 1024 * 1024;
+      const data = small && type !== 'image/gif' ? await readDataUrl(new Blob([file], { type })) : drawJpeg(bitmap, MAX_IMAGE_SIDE, 0.85);
+      return { data, thumb: drawJpeg(bitmap, 320, 0.8) };
+    } finally {
+      bitmap.close();
+    }
+  }
+
+  // Some browsers/OSes leave File.type empty; fall back to the extension.
+  const EXTENSION_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', pdf: 'application/pdf' };
+  function fileType(file) {
+    if (file.type) return file.type;
+    const ext = (/\.([a-z0-9]+)$/i.exec(file.name || '') || [])[1];
+    return ext ? EXTENSION_TYPES[ext.toLowerCase()] || '' : '';
   }
 
   function renderPending() {
@@ -163,7 +177,7 @@
       chip.className = 'chip';
       if (item.kind === 'image') {
         const img = document.createElement('img');
-        img.src = item.data;
+        img.src = item.thumb;
         img.alt = '';
         chip.append(img);
       } else {
@@ -205,12 +219,13 @@
   async function addFilesNow(files) {
     for (const file of files) {
       if (pending.length >= MAX_FILES) { bubble('e', 'แนบได้สูงสุด ' + MAX_FILES + ' ไฟล์ต่อข้อความ'); break; }
+      const type = fileType(file);
       try {
-        if (IMAGE_TYPES.includes(file.type)) {
-          pending.push({ kind: 'image', name: file.name || 'image', data: await prepareImage(file) });
-        } else if (file.type === 'application/pdf') {
+        if (IMAGE_TYPES.includes(type)) {
+          pending.push({ kind: 'image', name: file.name || 'image', ...(await prepareImage(file, type)) });
+        } else if (type === 'application/pdf') {
           if (file.size > MAX_PDF_BYTES) { bubble('e', file.name + ': ไฟล์ PDF ต้องไม่เกิน 10 MB'); continue; }
-          pending.push({ kind: 'pdf', name: file.name || 'document.pdf', data: await readDataUrl(file) });
+          pending.push({ kind: 'pdf', name: file.name || 'document.pdf', data: await readDataUrl(new Blob([file], { type })) });
         } else {
           bubble('e', (file.name || 'ไฟล์') + ': รองรับเฉพาะรูปภาพ (PNG, JPEG, WebP, GIF) และ PDF');
         }
@@ -232,16 +247,17 @@
     event.preventDefault();
     addFiles(files);
   });
+  // File drags are always cancelled (anywhere on the page) so a drop never opens the file and loses the chat.
+  const isFileDrag = (event) => Boolean(event.dataTransfer?.types.includes('Files'));
+  window.addEventListener('dragover', (event) => { if (isFileDrag(event)) event.preventDefault(); });
+  window.addEventListener('drop', (event) => { if (isFileDrag(event)) event.preventDefault(); });
   chat.addEventListener('dragover', (event) => {
-    if (attachButton.disabled || !event.dataTransfer?.types.includes('Files')) return;
-    event.preventDefault();
-    chat.classList.add('dragging');
+    if (isFileDrag(event) && !attachButton.disabled) chat.classList.add('dragging');
   });
   chat.addEventListener('dragleave', () => chat.classList.remove('dragging'));
   chat.addEventListener('drop', (event) => {
     chat.classList.remove('dragging');
     if (attachButton.disabled || !event.dataTransfer?.files.length) return;
-    event.preventDefault();
     addFiles(Array.from(event.dataTransfer.files));
   });
 
@@ -306,7 +322,7 @@
       for (const item of files) {
         if (item.kind === 'image') {
           const img = document.createElement('img');
-          img.src = item.data;
+          img.src = item.thumb;
           img.alt = item.name;
           strip.append(img);
         } else {
