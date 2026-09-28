@@ -278,6 +278,32 @@
     return node;
   }
 
+  // AI provider picker: lists only providers the server has a key for; remembers the choice per browser.
+  const PROVIDER_KEY = 'lsuperagent-chat-provider';
+  async function loadProviders() {
+    let providers = [{ id: 'openai', label: 'OpenAI', available: true }];
+    try {
+      const response = await fetch('/api/chat-providers', { credentials: 'same-origin', cache: 'no-store' });
+      const result = await response.json();
+      if (response.ok && Array.isArray(result.providers)) providers = result.providers.filter((item) => item.available);
+    } catch (_) { /* keep the OpenAI default */ }
+    if (!providers.length) providers = [{ id: 'openai', label: 'OpenAI' }];
+    model.innerHTML = '';
+    for (const item of providers) {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = item.label;
+      model.append(option);
+    }
+    let saved = null;
+    try { saved = localStorage.getItem(PROVIDER_KEY); } catch (_) { /* storage may be blocked */ }
+    if (saved && providers.some((item) => item.id === saved)) model.value = saved;
+    model.disabled = providers.length < 2;
+  }
+  model.addEventListener('change', () => {
+    try { localStorage.setItem(PROVIDER_KEY, model.value); } catch (_) { /* storage may be blocked */ }
+  });
+
   function toLogin() {
     location.replace('/login?return_to=%2Fchat');
   }
@@ -350,6 +376,7 @@
     if (turns[0]?.role !== 'user') turns.shift();
 
     sending = true;
+    const providerLabel = (model.selectedOptions[0] && model.selectedOptions[0].textContent) || 'AI';
     syncControls();
     renderPending();
     const wait = bubble('a', 'กำลังคิด');
@@ -360,7 +387,7 @@
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ message: text, messages: turns, mode, stream: true, ...(conversationId ? { conversation_id: conversationId } : {}), ...(files.length ? { attachments: files.map(({ name, data }) => ({ name, data })) } : {}), ...(mode === 'code' ? { tool: 'code' } : {}) }),
+        body: JSON.stringify({ message: text, messages: turns, mode, stream: true, ...(conversationId ? { conversation_id: conversationId } : {}), ...(files.length ? { attachments: files.map(({ name, data }) => ({ name, data })) } : {}), ...(mode === 'code' ? { tool: 'code' } : {}), provider: model.value || 'openai' }),
       });
       // Prefer the daily account quota; fall back to the short burst guard when no quota applies (e.g. owner).
       const dailyLeft = response.headers.get('x-lsuperagen-quota-remaining');
@@ -433,7 +460,7 @@
       answerNode.textContent = answer;
       const label = document.createElement('span');
       label.className = 'meta';
-      label.textContent = final.truncated ? 'AI · คำตอบยาวเกินกำหนด ระบบตัดไว้ พิมพ์ "ต่อ" เพื่อให้ตอบส่วนที่เหลือ' : 'AI';
+      label.textContent = final.truncated ? providerLabel + ' · คำตอบยาวเกินกำหนด ระบบตัดไว้ พิมพ์ "ต่อ" เพื่อให้ตอบส่วนที่เหลือ' : providerLabel;
       answerNode.append(label);
       chat.scrollTop = chat.scrollHeight;
     } catch (_) {
@@ -456,7 +483,7 @@
       const session = await response.json();
       if (!session.authenticated) return toLogin();
       $('who').textContent = session.user?.name || session.user?.email || 'Signed in';
-      model.innerHTML = '<option>OpenAI</option>';
+      await loadProviders();
       input.disabled = false;
       syncControls();
       const probe = await fetch('/api/chats', { credentials: 'same-origin', cache: 'no-store' }).catch(() => null);

@@ -580,12 +580,125 @@ function isModelAccessError(data) {
   return /does not have access to model|model .* not found|invalid model|not exist|do not have access/i.test(msg);
 }
 
-// Streamed chat: relays OpenAI Responses SSE as NDJSON lines the browser can read incrementally.
+// --- Claude (Anthropic Messages API) as a second chat provider ---------------------------------
+// Raw fetch like the OpenAI calls: this Worker ships without npm dependencies.
+const CLAUDE_DEFAULT_MODEL = 'claude-opus-5-5';
+// Models that accept server-side refusal fallbacks (fallbacks: "default").
+const CLAUDE_FALLBACK_MODELS = new Set(['claude-opus-5-5', 'claude-opus-5', 'claude-fable-5-1', 'claude-sonnet-5-5']);
+// Models that accept output_config.effort (Haiku 4.5 and older reject it).
+const CLAUDE_EFFORT_MODELS = new Set(['claude-opus-5-5', 'claude-opus-5', 'claude-fable-5-1', 'claude-fable-5', 'claude-sonnet-5-5', 'claude-sonnet-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6']);
+
+function claudeModel(env) {
+  const configured = typeof env.ANTHROPIC_MODEL === 'string' ? env.ANTHROPIC_MODEL.trim() : '';
+  return configured || CLAUDE_DEFAULT_MODEL;
+}
+
+function chatProviders(env) {
+  return [
+    { id: 'openai', label: 'OpenAI', available: Boolean(env.OPENAI_API_KEY) },
+    { id: 'claude', label: 'Claude', available: Boolean(env.ANTHROPIC_API_KEY) }
+  ];
+}
+
+// Same turns as the OpenAI path; attachments become image/document blocks placed before the text.
+function claudeMessages(history, message, attachments) {
+  const turns = history ? history.map(({ role, content }) => ({ role, content: content.trim() })) : [{ role: 'user', content: message }];
+  if (attachments.length) {
+    const blocks = attachments.map((item) => {
+      const comma = item.data.indexOf(',');
+      const mediaType = item.data.slice(5, item.data.indexOf(';'));
+      const source = { type: 'base64', media_type: mediaType, data: item.data.slice(comma + 1) };
+      return item.kind === 'image' ? { type: 'image', source } : { type: 'document', source };
+    });
+    turns[turns.length - 1] = { role: 'user', content: blocks.concat({ type: 'text', text: message }) };
+  }
+  return turns;
+}
+
+async function createClaudeMessage(env, messages, tool, mode, stream) {
+  const model = claudeModel(env);
+  const payload = {
+    model,
+    max_tokens: tool === 'code' ? 32000 : 16000,
+    system: toolInstructions(tool, mode),
+    messages
+  };
+  if (CLAUDE_EFFORT_MODELS.has(model)) payload.output_config = { effort: tool === 'code' ? 'high' : 'medium' };
+  const headers = { 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
+  if (CLAUDE_FALLBACK_MODELS.has(model)) {
+    // If a safety classifier declines, Anthropic re-runs the request on its recommended fallback model.
+    payload.fallbacks = 'default';
+    headers['anthropic-beta'] = 'server-side-fallback-2026-07-01';
+  }
+  if (stream) payload.stream = true;
+  const response = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers, body: JSON.stringify(payload) });
+  if (stream && response.ok) return { response, data: null };
+  const raw = await response.text();
+  let data = {};
+  try { data = raw ? JSON.parse(raw) : {}; } catch (_) { data = {}; }
+  return { response, data };
+}
+
+async function chatWithClaude({ env, history, message, attachments, tool, mode, stream, quota, recordHistory, headers }) {
+  let providerResponse, data;
+  try {
+    ({ response: providerResponse, data } = await createClaudeMessage(env, claudeMessages(history, message, attachments), tool, mode, stream));
+  } catch (_) {
+    await quota.refund();
+    return json({ ok: false, status: 'service_error', message: 'เชื่อมต่อ Claude ไม่สำเร็จ กรุณาลองใหม่' }, 502, headers);
+  }
+  if (providerResponse.ok && stream) return streamChatResponse(providerResponse, headers, { onComplete: recordHistory, onFail: quota.refund, interpret: claudeStreamEvent });
+  if (!providerResponse.ok) {
+    await quota.refund();
+    const busy = providerResponse.status === 429 || providerResponse.status === 529;
+    return json({ ok: false, status: 'service_error', message: busy ? 'Claude ถูกใช้งานหนาแน่น กรุณาลองใหม่อีกครั้ง' : 'Claude ไม่สามารถทำคำขอนี้ได้ในขณะนี้' }, busy ? 429 : 502, headers);
+  }
+  if (data.stop_reason === 'refusal') {
+    await quota.refund();
+    return json({ ok: false, status: 'refused', message: 'Claude ไม่สามารถตอบคำขอนี้ได้ ลองเปลี่ยนคำถามหรือเลือก OpenAI' }, 422, headers);
+  }
+  const output = (Array.isArray(data.content) ? data.content : []).filter((block) => block && block.type === 'text').map((block) => block.text).join('').trim();
+  if (!output) {
+    await quota.refund();
+    return json({ ok: false, status: 'empty_result', message: 'Claude ไม่ได้ส่งข้อความกลับมา กรุณาลองใหม่' }, 502, headers);
+  }
+  const extra = recordHistory ? await recordHistory(output) : {};
+  return json({ ok: true, status: 'completed', message: output, output, sources: [], ...(data.stop_reason === 'max_tokens' ? { truncated: true } : {}), ...extra }, 200, headers);
+}
+
+// Provider stream interpreters: turn one parsed SSE event into
+// { delta } | { done: { output, sources, truncated } } | { fail: 'error' | 'refused' } | null (ignore).
+// state.text holds the text streamed so far.
+function openAIStreamEvent(event, state) {
+  if (event.type === 'response.output_text.delta' && typeof event.delta === 'string') return { delta: event.delta };
+  // An answer cut off at the output-token cap is still a real answer: deliver it, flagged truncated.
+  if ((event.type === 'response.completed' || (event.type === 'response.incomplete' && isOutputCutOff(event.response))) && event.response) {
+    return { done: { output: extractOutputText(event.response) || state.text.trim(), sources: extractSources(event.response), truncated: event.type === 'response.incomplete' } };
+  }
+  if (event.type === 'response.failed' || event.type === 'response.incomplete' || event.type === 'error') return { fail: 'error' };
+  return null;
+}
+
+function claudeStreamEvent(event, state) {
+  if (event.type === 'content_block_delta' && event.delta && event.delta.type === 'text_delta' && typeof event.delta.text === 'string') return { delta: event.delta.text };
+  if (event.type === 'message_delta' && event.delta && event.delta.stop_reason) {
+    state.stopReason = event.delta.stop_reason;
+    return null;
+  }
+  if (event.type === 'message_stop') {
+    if (state.stopReason === 'refusal') return { fail: 'refused' };
+    return { done: { output: state.text.trim(), sources: [], truncated: state.stopReason === 'max_tokens' } };
+  }
+  if (event.type === 'error') return { fail: 'error' };
+  return null;
+}
+
+// Streamed chat: relays a provider's SSE stream as NDJSON lines the browser can read incrementally.
 //   {"type":"delta","text":"..."}                       zero or more
 //   {"type":"done","ok":true,"output":"...","sources":[]}   exactly one on success
 //   {"type":"error","ok":false,"message":"..."}          exactly one on failure (no fake output)
 // onComplete(output) runs before the done event and may add fields; onFail() runs when no answer was produced.
-function streamChatResponse(providerResponse, headers, { onComplete, onFail } = {}) {
+function streamChatResponse(providerResponse, headers, { onComplete, onFail, interpret = openAIStreamEvent } = {}) {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   const { readable, writable } = new TransformStream();
@@ -593,16 +706,16 @@ function streamChatResponse(providerResponse, headers, { onComplete, onFail } = 
   const emit = (event) => writer.write(encoder.encode(JSON.stringify(event) + '\n'));
   (async () => {
     let buffer = '';
-    let text = '';
+    const state = { text: '' };
     let finished = false;
     const handle = async (event) => {
-      if (event.type === 'response.output_text.delta' && typeof event.delta === 'string') {
-        text += event.delta;
-        await emit({ type: 'delta', text: event.delta });
-      } else if ((event.type === 'response.completed' || (event.type === 'response.incomplete' && isOutputCutOff(event.response))) && event.response) {
-        // An answer cut off at the output-token cap is still a real answer: deliver it, flagged truncated.
-        const output = extractOutputText(event.response) || text.trim();
-        const truncated = event.type === 'response.incomplete';
+      const action = interpret(event, state);
+      if (!action) return;
+      if (action.delta !== undefined) {
+        state.text += action.delta;
+        await emit({ type: 'delta', text: action.delta });
+      } else if (action.done) {
+        const { output, sources, truncated } = action.done;
         finished = true;
         if (!output) {
           if (onFail) await onFail();
@@ -610,11 +723,13 @@ function streamChatResponse(providerResponse, headers, { onComplete, onFail } = 
           return;
         }
         const extra = onComplete ? await onComplete(output) : {};
-        await emit({ type: 'done', ok: true, status: 'completed', output, sources: extractSources(event.response), ...(truncated ? { truncated: true } : {}), ...extra });
-      } else if (event.type === 'response.failed' || event.type === 'response.incomplete' || event.type === 'error') {
+        await emit({ type: 'done', ok: true, status: 'completed', output, sources: sources || [], ...(truncated ? { truncated: true } : {}), ...extra });
+      } else if (action.fail) {
         finished = true;
         if (onFail) await onFail();
-        await emit({ type: 'error', ok: false, status: 'service_error', message: 'บริการ AI ตอบไม่ครบ กรุณาลองใหม่' });
+        await emit(action.fail === 'refused'
+          ? { type: 'error', ok: false, status: 'refused', message: 'Claude ไม่สามารถตอบคำขอนี้ได้ ลองเปลี่ยนคำถามหรือเลือก OpenAI' }
+          : { type: 'error', ok: false, status: 'service_error', message: 'บริการ AI ตอบไม่ครบ กรุณาลองใหม่' });
       }
     };
     try {
@@ -712,9 +827,12 @@ async function handleChat(request, env, session = null, quotaIdentity = session)
   const mode = typeof body.mode === 'string' && body.mode.trim() ? body.mode.trim().slice(0, 32) : 'chat';
   const tool = inferTool(body, request);
   const stream = body.stream === true;
+  const provider = body.provider === undefined || body.provider === null || body.provider === '' ? 'openai' : body.provider;
+  if (provider !== 'openai' && provider !== 'claude') return json({ ok: false, status: 'validation_error', message: 'ผู้ให้บริการ AI ที่เลือกไม่ถูกต้อง' }, 400);
   if (!message) return json({ ok: false, status: 'validation_error', message: 'กรุณาใส่ข้อความก่อนส่ง' }, 400);
   if (message.length > 120000) return json({ ok: false, status: 'validation_error', message: 'ข้อความยาวเกินขีดจำกัด 120,000 ตัวอักษร กรุณาแบ่งเป็นส่วนย่อย' }, 413);
   if (tool === 'invalid') return json({ ok: false, status: 'validation_error', message: 'โหมดที่ส่งมาไม่ถูกต้อง' }, 400);
+  if (provider === 'claude' && (tool === 'research' || tool === 'url')) return json({ ok: false, status: 'validation_error', message: 'โหมดค้นเว็บ/อ่าน URL ใช้ได้กับ OpenAI เท่านั้น' }, 400);
   const rate = checkRateLimit(request, tool);
   const baseHeaders = rateLimitHeaders(rate);
   if (rate.limited) return json({ ok: false, status: 'rate_limited', message: 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองอีกครั้ง' }, 429, baseHeaders);
@@ -723,11 +841,13 @@ async function handleChat(request, env, session = null, quotaIdentity = session)
   if (attachments.error) return json({ ok: false, status: 'validation_error', message: attachments.error }, 400, baseHeaders);
   const input = withAttachments(history ? history.map(({ role, content }) => ({ role, content: content.trim() })) : message, message, attachments.items);
   const recordHistory = historyRecorder(env, session, body.conversation_id, attachmentNote(message, attachments.items));
-  if (!env.OPENAI_API_KEY) return json({ ok: false, status: 'service_unavailable', message: 'บริการ AI ยังไม่พร้อมใช้งานในขณะนี้' }, 503, baseHeaders);
+  if (provider === 'claude' ? !env.ANTHROPIC_API_KEY : !env.OPENAI_API_KEY) return json({ ok: false, status: 'service_unavailable', message: provider === 'claude' ? 'Claude ยังไม่พร้อมใช้งานในขณะนี้' : 'บริการ AI ยังไม่พร้อมใช้งานในขณะนี้' }, 503, baseHeaders);
   // Daily quota: a message costs 1, or 2 when it carries attachments.
   const quota = await takeQuota(env, quotaIdentity, 'chat', attachments.items.length ? 2 : 1, { exempt: isOwnerGoogleSession(quotaIdentity, env) });
   Object.assign(baseHeaders, quotaHeaders(quota));
   if (!quota.ok) return json({ ok: false, status: 'quota_exceeded', message: quotaMessage(quota, 'ข้อความ'), reset_at: new Date(quota.resetAt).toISOString() }, 429, { ...baseHeaders, 'retry-after': String(Math.max(1, Math.ceil((quota.resetAt - Date.now()) / 1000))) });
+
+  if (provider === 'claude') return chatWithClaude({ env, history, message, attachments: attachments.items, tool, mode, stream, quota, recordHistory, headers: baseHeaders });
 
   const requestId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
   const webMode = tool === 'research' || tool === 'url';
@@ -1046,6 +1166,10 @@ export default {
     }
     if (pathname === '/api/chat') return handleChat(request, env, await currentSession(request, env));
     if (pathname === '/api/chats' || pathname.startsWith('/api/chats/')) return handleChatHistory(request, env, pathname);
+    if (pathname === '/api/chat-providers') {
+      if (!await currentSession(request, env)) return json({ ok: false, error: 'authentication_required' }, 401);
+      return json({ ok: true, providers: chatProviders(env), default: 'openai' });
+    }
     if (pathname === '/api/image') return handleImage(request, env, await currentSession(request, env));
     if (pathname === '/api/exa/search') return handleExaSearch(request, env);
 
