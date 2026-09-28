@@ -104,3 +104,26 @@ Commit แก้ comment: `cd9879c100c5838b6219416084a4d9953e70c6cb`.
 Commit แก้ test: `dff72afbb3423cf92d9663c4b01c531d3c69c8fe`.
 
 ยังไม่มี GitHub Actions workflow run หรือ commit status สำหรับ editorial commit; การตรวจ browser หลัง login ที่ 390px/1280px และ flow `/keys → /guide → Run all` ยังเป็นข้อจำกัดเดิม
+
+
+## Update — Next.js migration merged into main
+
+ตรวจ merge commit `e2ee7c46aeccfe254d56fdcdb9c277096989d6f7` (PR #17) แล้ว:
+
+- เริ่ม migration แบบแยกส่วนใน `next-app/`; มีเพียง `/loading` ที่เป็น React/Next.js native ในระยะนี้
+- production เดิมยังเป็น Worker/static site และ `.assetsignore` กัน `next-app/**` ไม่ให้ปะปนกับ legacy static deployment
+- navigation ของ route ที่ยังไม่ย้ายชี้กลับ `https://agents-sdk.space`; local `/chat` และ `/api/chat` ตั้งใจให้ 404 เพื่อไม่ทำ auth/API ซ้ำ
+- `next-app/package.json` pin `next@16.3.6`, `react@19.3.0`, `react-dom@19.3.0`, Node `>=20.9.0`
+- commit ต้นทาง `ef22facadb33cce11da9d23f58394c8a3d5737f7` ระบุว่า build, HTTP smoke และ legacy Node tests 75/75 ผ่าน แต่ local browser test ถูกบล็อกเพราะ Chromium download ไม่สมบูรณ์
+- workflow `.github/workflows/next-app-verify.yml` มี build และ Playwright สำหรับ PR/branch migration อย่างไรก็ตาม GitHub API ยังไม่แสดง commit status หรือ workflow run สำหรับ merge commit ล่าสุด จึงยังไม่นับว่า browser suite ผ่าน
+- ก่อน merge Next.js มีงาน `/chat` streaming และ D1 chat history ถูก merge เข้า `main` ผ่าน PR #18/#19; เป็นการเปลี่ยน backend/client contract ที่ควร regression-test แยกจาก visual migration แม้ไม่แก้ `/guide` โดยตรง
+
+ไม่พบ regression ที่พิสูจน์ได้ใน `/guide` จาก merge นี้ และไม่ได้ย้อนโค้ด migration
+
+สิ่งที่ควรทำต่อ:
+
+1. รัน/ยืนยัน GitHub Actions ของ `next-app` ให้มีหลักฐาน build + Playwright บน SHA ที่อยู่ใน `main`
+2. เปิด preview แยก origin และตรวจ `/loading` ที่ 390px/1280px: theme persistence, copy button, overflow, links และ console errors
+3. ห้ามชี้โดเมน production เข้า `next-app` จนกว่าจะย้าย auth/session-aware routes และเลิก root redirect ชั่วคราว เพราะเอกสาร migration ระบุว่าจะเกิด redirect loop
+4. ก่อนย้าย `/guide` ให้ล็อก contract เดิม: signed session, `/keys → /guide`, `lsupergen-sdk@0.1.0` และ Proof report 5/5
+5. ทดสอบร่วมกับการเปลี่ยน chat ใหม่: NDJSON stream ขาดกลางคัน, conversation ownership ใน D1, reload จาก `?c=` และ storage failure ที่ต้องไม่ทำให้คำตอบจริงหาย
