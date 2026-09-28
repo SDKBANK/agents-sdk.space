@@ -106,6 +106,48 @@
     }
     .btn-ghost:hover { border-color: #3a3a3a; }
 
+    /* History panel */
+    .history {
+      margin-bottom: 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      max-height: 280px;
+      overflow-y: auto;
+    }
+    .history-empty { color: var(--muted); font-size: 13px; padding: 14px; }
+    .history-row { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--line); }
+    .history-row:last-child { border-bottom: 0; }
+    .history-row.current { background: #16171f; }
+    .history-open {
+      flex: 1;
+      min-width: 0;
+      padding: 10px 14px;
+      background: none;
+      border: 0;
+      color: var(--text);
+      font: inherit;
+      font-size: 14px;
+      text-align: left;
+      cursor: pointer;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .history-open small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .history-del {
+      margin-right: 8px;
+      padding: 4px 8px;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .history-del:hover { color: var(--text); }
+
     /* Chat */
     .chat {
       flex: 1;
@@ -188,8 +230,11 @@
     <select id="provider" aria-label="Model" disabled><option>กำลังโหลดโมเดล…</option></select>
     <span id="mode-label" class="mode-label">แชท</span>
     <span class="quota" id="quota"></span>
+    <button type="button" class="btn-ghost" id="history-toggle" aria-expanded="false" aria-controls="history" hidden>ประวัติ</button>
     <button type="button" class="btn-ghost" id="clear">New chat</button>
   </div>
+
+  <div class="history" id="history" hidden></div>
 
   <div class="chat" id="chat" aria-live="polite">
     <div class="empty" id="empty">ลองถามอะไรก็ได้เกี่ยวกับ AI SDK<br>เช่น "generateText ต่างจาก streamText ยังไง"</div>
@@ -202,7 +247,7 @@
   <p class="hint" id="hint">ระบุเป้าหมาย แนบบริบท แล้วเลือกคำตอบไปปรับใช้</p>
 
 </main>
-  <script src="/assets/chat.js?v=2"></script>
+  <script src="/assets/chat.js?v=3"></script>
 </body>
 </html>
 

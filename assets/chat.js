@@ -15,6 +15,107 @@
   }
   const turns = [];
   const MAX_TURNS = 20;
+  const historyPanel = $('history');
+  const historyToggle = $('history-toggle');
+  let conversationId = new URLSearchParams(location.search).get('c');
+  let historyAvailable = false;
+
+  function setConversation(id) {
+    conversationId = id || null;
+    const params = new URLSearchParams(location.search);
+    if (conversationId) params.set('c', conversationId); else params.delete('c');
+    const query = params.toString();
+    history.replaceState(null, '', location.pathname + (query ? '?' + query : ''));
+    historyPanel.querySelectorAll('.history-row').forEach((row) => row.classList.toggle('current', row.dataset.id === conversationId));
+  }
+
+  function resetChat(message) {
+    turns.length = 0;
+    chat.innerHTML = '';
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.id = 'empty';
+    empty.textContent = message;
+    chat.append(empty);
+  }
+
+  async function loadHistoryList() {
+    const response = await fetch('/api/chats', { credentials: 'same-origin', cache: 'no-store' });
+    const result = await response.json().catch(() => ({}));
+    historyPanel.innerHTML = '';
+    if (!response.ok || !result.ok) {
+      const note = document.createElement('p');
+      note.className = 'history-empty';
+      note.textContent = result.message || 'โหลดประวัติแชตไม่สำเร็จ';
+      historyPanel.append(note);
+      return;
+    }
+    if (!result.conversations.length) {
+      const note = document.createElement('p');
+      note.className = 'history-empty';
+      note.textContent = 'ยังไม่มีประวัติแชต';
+      historyPanel.append(note);
+      return;
+    }
+    for (const item of result.conversations) {
+      const row = document.createElement('div');
+      row.className = 'history-row' + (item.id === conversationId ? ' current' : '');
+      row.dataset.id = item.id;
+      const open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'history-open';
+      open.textContent = item.title;
+      const when = document.createElement('small');
+      when.textContent = new Date(item.updated_at).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
+      open.append(when);
+      open.addEventListener('click', () => openConversation(item.id));
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'history-del';
+      del.textContent = 'ลบ';
+      del.setAttribute('aria-label', 'ลบแชต ' + item.title);
+      del.addEventListener('click', () => removeConversation(item.id, item.title));
+      row.append(open, del);
+      historyPanel.append(row);
+    }
+  }
+
+  async function openConversation(id) {
+    const response = await fetch('/api/chats/' + encodeURIComponent(id), { credentials: 'same-origin', cache: 'no-store' });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) {
+      if (response.status === 401) return toLogin();
+      setConversation(null);
+      bubble('e', result.message || 'เปิดแชตนี้ไม่ได้');
+      return;
+    }
+    resetChat('แชตนี้ยังไม่มีข้อความ');
+    for (const item of result.conversation.messages) bubble(item.role === 'user' ? 'u' : 'a', item.content);
+    turns.push(...result.conversation.messages.slice(-MAX_TURNS));
+    if (turns[0]?.role !== 'user') turns.shift();
+    setConversation(id);
+  }
+
+  async function removeConversation(id, title) {
+    if (!confirm('ลบแชต "' + title + '" ถาวร?')) return;
+    const response = await fetch('/api/chats/' + encodeURIComponent(id), { method: 'DELETE', credentials: 'same-origin' });
+    if (!response.ok) {
+      bubble('e', 'ลบแชตไม่สำเร็จ ลองใหม่อีกครั้ง');
+      return;
+    }
+    if (id === conversationId) {
+      setConversation(null);
+      resetChat('ลบแชตแล้ว เริ่มแชทใหม่ได้เลย');
+    }
+    await loadHistoryList();
+  }
+
+  historyToggle.addEventListener('click', async () => {
+    const opening = historyPanel.hidden;
+    historyPanel.hidden = !opening;
+    historyToggle.setAttribute('aria-expanded', String(opening));
+    if (opening) await loadHistoryList();
+  });
 
   function bubble(kind, text, meta) {
     $('empty')?.remove();
@@ -41,8 +142,8 @@
   });
 
   $('clear').addEventListener('click', () => {
-    turns.length = 0;
-    chat.innerHTML = '<div class="empty" id="empty">' + (mode === 'code' ? 'เริ่มโจทย์โค้ดใหม่ได้เลย' : 'เริ่มแชทใหม่ได้เลย') + '</div>';
+    setConversation(null);
+    resetChat(mode === 'code' ? 'เริ่มโจทย์โค้ดใหม่ได้เลย' : 'เริ่มแชทใหม่ได้เลย');
   });
 
   input.addEventListener('input', () => {
@@ -78,7 +179,7 @@
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ message: text, messages: turns, mode, stream: true, ...(mode === 'code' ? { tool: 'code' } : {}) }),
+        body: JSON.stringify({ message: text, messages: turns, mode, stream: true, ...(conversationId ? { conversation_id: conversationId } : {}), ...(mode === 'code' ? { tool: 'code' } : {}) }),
       });
       const remaining = response.headers.get('x-lsuperagen-rate-remaining');
       const limit = response.headers.get('x-lsuperagen-rate-limit');
@@ -132,6 +233,10 @@
       }
       const answer = final.output || streamed;
       turns.push({ role: 'assistant', content: answer });
+      if (final.conversation_id) {
+        setConversation(final.conversation_id);
+        if (!historyPanel.hidden) loadHistoryList();
+      }
       if (!answerNode) answerNode = bubble('a', '');
       answerNode.textContent = answer;
       const label = document.createElement('span');
@@ -159,6 +264,12 @@
       model.innerHTML = '<option>OpenAI</option>';
       input.disabled = false;
       send.disabled = false;
+      const probe = await fetch('/api/chats', { credentials: 'same-origin', cache: 'no-store' }).catch(() => null);
+      historyAvailable = Boolean(probe && probe.ok);
+      historyToggle.hidden = !historyAvailable;
+      if (historyAvailable) $('hint').textContent = 'แชตจะถูกบันทึกในบัญชีของคุณ ลบได้จากปุ่ม "ประวัติ" · อย่าใส่รหัสผ่านหรือ API key';
+      if (historyAvailable && conversationId) await openConversation(conversationId);
+      else if (conversationId) setConversation(null);
     } catch (_) {
       bubble('e', 'ตรวจสอบการเข้าสู่ระบบไม่ได้ ลองรีเฟรชหน้า');
     }

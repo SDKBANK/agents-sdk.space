@@ -1,4 +1,5 @@
 import { getFeed, SOURCES as FEED_SOURCES } from './feeds.js';
+import { historyEnabled, userKey, listConversations, getConversation, deleteConversation, saveExchange } from './chat-store.js';
 
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const RATE_LIMIT_MAX_REQUESTS = 10;
@@ -525,7 +526,7 @@ function isModelAccessError(data) {
 //   {"type":"delta","text":"..."}                       zero or more
 //   {"type":"done","ok":true,"output":"...","sources":[]}   exactly one on success
 //   {"type":"error","ok":false,"message":"..."}          exactly one on failure (no fake output)
-function streamChatResponse(providerResponse, headers) {
+function streamChatResponse(providerResponse, headers, onComplete) {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   const { readable, writable } = new TransformStream();
@@ -542,8 +543,9 @@ function streamChatResponse(providerResponse, headers) {
       } else if (event.type === 'response.completed' && event.response) {
         const output = extractOutputText(event.response) || text.trim();
         finished = true;
+        const extra = output && onComplete ? await onComplete(output) : {};
         await emit(output
-          ? { type: 'done', ok: true, status: 'completed', output, sources: extractSources(event.response) }
+          ? { type: 'done', ok: true, status: 'completed', output, sources: extractSources(event.response), ...extra }
           : { type: 'error', ok: false, status: 'empty_result', message: 'บริการ AI ไม่ได้ส่งข้อความกลับมา กรุณาลองใหม่' });
       } else if (event.type === 'response.failed' || event.type === 'response.incomplete' || event.type === 'error') {
         finished = true;
@@ -580,7 +582,20 @@ function streamChatResponse(providerResponse, headers) {
   });
 }
 
-async function handleChat(request, env) {
+// Saves a finished exchange for a signed-in /api/chat user. History is best effort:
+// a storage failure never hides a real answer, it only reports history_saved: false.
+function historyRecorder(env, session, conversationId, userText) {
+  if (!session || !historyEnabled(env)) return null;
+  return async (output) => {
+    try {
+      return { conversation_id: await saveExchange(env, userKey(session), conversationId, userText, output), history_saved: true };
+    } catch (_) {
+      return { history_saved: false };
+    }
+  };
+}
+
+async function handleChat(request, env, session = null) {
   if (request.method !== 'POST') return json({ ok: false, status: 'method_not_allowed', message: 'ส่งคำขอด้วย POST เท่านั้น' }, 405, { allow: 'POST, OPTIONS' });
   let body = {};
   try { body = await request.json(); } catch (_) { body = {}; }
@@ -597,6 +612,7 @@ async function handleChat(request, env) {
   const mode = typeof body.mode === 'string' && body.mode.trim() ? body.mode.trim().slice(0, 32) : 'chat';
   const tool = inferTool(body, request);
   const stream = body.stream === true;
+  const recordHistory = historyRecorder(env, session, body.conversation_id, message);
   if (!message) return json({ ok: false, status: 'validation_error', message: 'กรุณาใส่ข้อความก่อนส่ง' }, 400);
   if (message.length > 120000) return json({ ok: false, status: 'validation_error', message: 'ข้อความยาวเกินขีดจำกัด 120,000 ตัวอักษร กรุณาแบ่งเป็นส่วนย่อย' }, 413);
   if (tool === 'invalid') return json({ ok: false, status: 'validation_error', message: 'โหมดที่ส่งมาไม่ถูกต้อง' }, 400);
@@ -618,16 +634,43 @@ async function handleChat(request, env) {
     } catch (_) {
       return json({ ok: false, status: 'service_error', message: 'เชื่อมต่อบริการ AI ไม่สำเร็จ กรุณาลองใหม่' }, 502, baseHeaders);
     }
-    if (providerResponse.ok && stream) return streamChatResponse(providerResponse, baseHeaders);
+    if (providerResponse.ok && stream) return streamChatResponse(providerResponse, baseHeaders, recordHistory);
     if (providerResponse.ok) {
       const output = extractOutputText(data);
       if (!output) return json({ ok: false, status: 'empty_result', message: 'บริการ AI ไม่ได้ส่งข้อความกลับมา กรุณาลองใหม่' }, 502, baseHeaders);
-      return json({ ok: true, status: 'completed', message: output, output, sources: extractSources(data) }, 200, baseHeaders);
+      const extra = recordHistory ? await recordHistory(output) : {};
+      return json({ ok: true, status: 'completed', message: output, output, sources: extractSources(data), ...extra }, 200, baseHeaders);
     }
     lastStatus = providerResponse.status;
     if (!isModelAccessError(data)) break;
   }
   return json({ ok: false, status: 'service_error', message: lastStatus === 429 ? 'บริการ AI ถูกใช้งานหนาแน่น กรุณาลองใหม่อีกครั้ง' : 'บริการ AI ไม่สามารถทำคำขอนี้ได้ในขณะนี้' }, lastStatus === 429 ? 429 : 502, baseHeaders);
+}
+
+async function handleChatHistory(request, env, pathname) {
+  const session = await currentSession(request, env);
+  if (!session) return json({ ok: false, error: 'authentication_required', message: 'กรุณาเข้าสู่ระบบก่อนดูประวัติแชต' }, 401);
+  if (!historyEnabled(env)) return json({ ok: false, status: 'service_unavailable', message: 'ระบบประวัติแชตยังไม่พร้อมใช้งาน' }, 503);
+  const key = userKey(session);
+  const id = pathname === '/api/chats' ? null : decodeURIComponent(pathname.slice('/api/chats/'.length));
+  try {
+    if (!id) {
+      if (request.method !== 'GET') return json({ ok: false, status: 'method_not_allowed' }, 405, { allow: 'GET' });
+      return json({ ok: true, conversations: await listConversations(env, key) });
+    }
+    if (request.method === 'GET') {
+      const conversation = await getConversation(env, key, id);
+      return conversation ? json({ ok: true, conversation }) : json({ ok: false, status: 'not_found', message: 'ไม่พบแชตนี้' }, 404);
+    }
+    if (request.method === 'DELETE') {
+      const origin = request.headers.get('origin');
+      if (origin && origin !== new URL(request.url).origin) return json({ ok: false, error: 'forbidden_origin' }, 403);
+      return await deleteConversation(env, key, id) ? json({ ok: true, deleted: id }) : json({ ok: false, status: 'not_found', message: 'ไม่พบแชตนี้' }, 404);
+    }
+    return json({ ok: false, status: 'method_not_allowed' }, 405, { allow: 'GET, DELETE' });
+  } catch (_) {
+    return json({ ok: false, status: 'service_error', message: 'อ่านประวัติแชตไม่สำเร็จ กรุณาลองใหม่' }, 502);
+  }
 }
 
 async function handleImage(request, env) {
@@ -875,7 +918,8 @@ export default {
     if (pathname === '/api/chat' || pathname === '/api/image') {
       if (!await currentSession(request, env)) return json({ ok: false, error: 'authentication_required', message: 'กรุณาเข้าสู่ระบบก่อนใช้งาน AI Workspace' }, 401);
     }
-    if (pathname === '/api/chat') return handleChat(request, env);
+    if (pathname === '/api/chat') return handleChat(request, env, await currentSession(request, env));
+    if (pathname === '/api/chats' || pathname.startsWith('/api/chats/')) return handleChatHistory(request, env, pathname);
     if (pathname === '/api/image') return handleImage(request, env);
     if (pathname === '/api/exa/search') return handleExaSearch(request, env);
 

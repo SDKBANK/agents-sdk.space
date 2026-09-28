@@ -62,6 +62,8 @@ src/firebase-worker.js
         ├─ /auth/logout, /api/auth/status, /api/auth/session
         ├─ /chat, /tools                  login required → /login?return_to=...
         ├─ /api/chat   POST               login required → OpenAI Responses API
+        ├─ /api/chats GET                 login required → own conversations (D1, newest 50)
+        ├─ /api/chats/:id GET | DELETE    login required, own conversation only; DELETE same-origin
         ├─ /api/image  POST               login required → OpenAI Images API
         ├─ /docs, /docs/:page             login required → docs-shell.html (Docus-style docs: sidebar, search, TOC)
         ├─ /guide  (/sdk → /guide)        login required → lsupergen-sdk guide with live "run" checks
@@ -110,6 +112,9 @@ POST /api/chat          rate limit: 10 requests / 10 min (in-memory, per isolate
                           or one {"type":"error","ok":false,"message"}; errors before streaming stay JSON
                         without stream (SDK /v1/chat) → unchanged single JSON response
                         chat.html (assets/chat.js) always requests stream: true
+                        signed-in + DB bound → finished exchange saved to D1; response/done event
+                          adds conversation_id + history_saved (storage failure → history_saved: false,
+                          answer still returned). Client sends conversation_id to continue a chat.
   ↓
 OpenAI Responses API    model: OPENAI_MODEL first, then built-in fallback list
                         research/url tools use a web-capable model list
@@ -156,7 +161,7 @@ Anthropic/Claude provider as first runtime provider
 Gemini provider
 DeepSeek provider
 Zapier MCP runtime integration
-R2 / D1 / KV persistence (no server-side user DB; sessions are cookies only)
+R2 / KV persistence (sessions are cookies only)
 Firestore / Firebase Admin SDK
 ```
 
@@ -166,7 +171,8 @@ Rules:
 Do not wire Supabase.
 Do not require Trusted Gateway.
 Do not use Claude/Anthropic as first provider.
-Do not create D1/KV/R2 or Firestore unless explicitly approved.
+Do not create KV/R2 or Firestore unless explicitly approved.
+D1 is approved (2026-09-28) for chat history (and planned: per-account rate limit) only.
 Firebase is used for authentication only — do not expand its scope without approval.
 Do not rotate, print, commit, or expose secrets.
 ```
@@ -192,6 +198,8 @@ guide.html               lsupergen-sdk guide (login required); assets/guide.js r
 vendor/lsupergen-sdk/    vendored npm build served same-origin (CSP allows 'self' scripts only)
 tools.html               tools catalog (login required)
 news.html                live AI news (login required); assets/news.js renders /api/feed
+src/chat-store.js        D1 chat history (binding DB); every query scoped to user_key = provider:id
+migrations/*.sql         D1 schema (0001_chat_history.sql; applied to agentssdkspace 2026-09-28)
 src/feeds.js             news sources + parsers (ported from thanabartbb/main web/src/feeds.js)
 dev.html / dev-code-drop.html   owner-only dev surfaces
 admin.html               legacy, redirected to /dev
@@ -281,7 +289,7 @@ R4  /api/chat validation                      DONE
 R5  OpenAI provider with Cloudflare Secret    DONE IN CODE / VERIFY LIVE
 R6  Auth: Google OAuth + Firebase             DONE IN CODE / VERIFY LIVE
 R7  Rate limit / abuse guard                  PARTIAL (in-memory per isolate)
-R8  Memory / persistence                      FUTURE, not current
+R8  Chat history persistence (D1)             DONE IN CODE / VERIFY LIVE
 ```
 
 ---
@@ -304,7 +312,8 @@ R8  Memory / persistence                      FUTURE, not current
 ## 11. Last Updated
 
 ```txt
-2026-09-24
+2026-09-28
+D1 "agentssdkspace" bound as DB: chat history for signed-in users
 Router mode: Cloudflare + Firebase auth + OpenAI-first
 Entry: src/firebase-worker.js → src/index.js
 Auth status: active (Google OAuth + Firebase); /chat, /tools, /api/chat, /api/image require login

@@ -7,3 +7,10 @@ directory = "."
 binding = "ASSETS"
 html_handling = "auto-trailing-slash"
 run_worker_first = true
+
+# Chat history (src/chat-store.js). Schema: migrations/0001_chat_history.sql
+[[d1_databases]]
+binding = "DB"
+database_name = "agentssdkspace"
+database_id = "cd8c2695-040b-443c-8bbd-6d798d72a0d5"
+migrations_dir = "migrations"
