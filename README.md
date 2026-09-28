@@ -70,6 +70,12 @@ Every feature or page must declare its data contract before implementation.
 | `docs_page` | slug `[a-z0-9-]+` | `/docs/:page`, `assets/docs-nav.js` | Must have a matching `docs-content/<slug>.html`; unknown slugs render a not-found message. |
 | `api_key` | string `lsg_…` | `POST /api/sdk/keys` | Stateless signed token, 30-day expiry, shown once; never stored or logged. |
 | `quota_remaining` | number or unavailable | `/api/chat` rate headers | Shows only the current isolate's temporary rate count after a successful response. |
+| `stream` | boolean, optional | `/api/chat` request body, `assets/chat.js` | `true` returns `application/x-ndjson` (`delta`* then one `done` or `error`); omitted keeps the single JSON response. |
+| `conversation_id` | string `c_` + 32 hex, optional | `/api/chat` request and response, `src/chat-store.js` | Request: continue that conversation only if the caller owns it. Response: present only when the exchange was saved. |
+| `history_saved` | boolean, response only | `/api/chat` response / `done` event | Present only for signed-in `/api/chat` with D1 bound; `false` means the answer is real but was not stored. |
+| `attachments` | array, optional, 0–4 items | `/api/chat` request body, `assets/chat.js` | Current user turn only; ≤20 MB decoded total; whole request body ≤28 MB (else 413). Invalid → 400 `validation_error`, no provider call. |
+| `attachments[].data` | string, required | base64 `data:` URL built in the browser | MIME `image/png`, `image/jpeg`, `image/webp`, `image/gif` (≤5 MB) or `application/pdf` (≤10 MB); base64 length a multiple of 4. Never stored. |
+| `attachments[].name` | string, optional | file name from the browser | Control characters removed, ≤120 characters, default `image` / `document.pdf`. Stored in history as `📎 name` only when the turn stays ≤12,000 characters. |
 
 Mock fixtures are allowed only when named as fixtures. Placeholder content must not be presented as live functionality.
 
@@ -152,7 +158,7 @@ Acceptance: remove the entire AI WORKSPACE intro row; reduce header brand size a
 
 ## Chat contract — 2026-09-28
 
-`POST /api/chat` (login required) accepts `stream: true` and then returns `application/x-ndjson`: `delta` events, then exactly one `done` or `error` event. Signed-in exchanges are saved to D1 and the response adds `conversation_id` and `history_saved`; `GET /api/chats`, `GET /api/chats/:id` and `DELETE /api/chats/:id` serve only the caller's own conversations. `attachments` (up to 4 base64 data URLs: PNG/JPEG/WebP/GIF ≤5 MB, PDF ≤10 MB, ≤20 MB total) go to the model as `input_image` / `input_file` for the current turn only; history keeps just the file names. Full field-level contract: `LSUPERAGENT.md` §2. The SDK route `/v1/chat` does not save history.
+`POST /api/chat` (login required) accepts `stream: true` and then returns `application/x-ndjson`: `delta` events, then exactly one `done` or `error` event. Signed-in exchanges are saved to D1 and the response adds `conversation_id` and `history_saved`; `GET /api/chats`, `GET /api/chats/:id` and `DELETE /api/chats/:id` serve only the caller's own conversations. `attachments` (up to 4 base64 data URLs: PNG/JPEG/WebP/GIF ≤5 MB, PDF ≤10 MB, ≤20 MB total) go to the model as `input_image` / `input_file` for the current turn only; history keeps just the file names. Field-level contract: the `stream`, `conversation_id`, `history_saved` and `attachments` rows in §3 Data Contract above. The SDK route `/v1/chat` does not save history.
 
 ## Next.js migration — 2026-09-28
 

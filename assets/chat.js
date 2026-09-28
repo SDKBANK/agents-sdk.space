@@ -307,7 +307,8 @@
     event.preventDefault();
     if (send.disabled || preparing > 0) return;
     const files = pending.splice(0);
-    const text = input.value.trim() || (files.length ? 'ช่วยดูไฟล์ที่แนบมา' : '');
+    const typed = input.value.trim();
+    const text = typed || (files.length ? 'ช่วยดูไฟล์ที่แนบมา' : '');
     if (!text) {
       pending.push(...files);
       return;
@@ -335,8 +336,10 @@
       }
       userNode.prepend(strip);
     }
+    // On failure, put the typed prompt and the attachments back so a retry sends the same request.
     // Attaching is locked while this request runs, so the failed set comes back whole.
     const restoreFiles = () => {
+      if (typed && !input.value.trim()) input.value = typed;
       if (!files.length) return;
       pending.unshift(...files);
       renderPending();
