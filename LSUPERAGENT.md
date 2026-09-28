@@ -106,7 +106,13 @@ Guide page:   guide.html + assets/guide.js, runs vendor/lsupergen-sdk/0.1.0/inde
 ```txt
 /chat (signed in)
   ↓
-POST /api/chat          rate limit: 10 requests / 10 min (in-memory, per isolate)
+POST /api/chat          burst guard: 10 requests / 10 min per IP+tool (in-memory, per isolate)
+                        daily quota (src/quota.js, D1 usage_counters): per account 50 chat units/day
+                          (a message = 1, with attachments = 2), 10 images/day, site-wide 2000 units/day;
+                          resets 00:00 Asia/Bangkok; owner exempt; refunded when no answer is produced;
+                          over quota → 429 { status: "quota_exceeded", reset_at }; headers x-lsuperagen-quota-*
+                          /v1/chat and /v1/image charge the SDK key owner's quota
+                        answer cut at max_output_tokens → delivered with truncated: true (not an error)
                         body.stream === true → application/x-ndjson:
                           {"type":"delta","text"} … then one {"type":"done","ok":true,"output","sources"}
                           or one {"type":"error","ok":false,"message"}; errors before streaming stay JSON
@@ -147,6 +153,7 @@ Secrets:
 Other vars:
   GOOGLE_CLIENT_ID, GITHUB_CLIENT_ID
   OPENAI_MODEL             preferred chat model
+  CHAT_DAILY_LIMIT, IMAGE_DAILY_LIMIT, SITE_DAILY_LIMIT   optional quota overrides (defaults 50 / 10 / 2000)
   OWNER_GOOGLE_EMAIL, OWNER_GOOGLE_SUB, ADMIN_ALLOWED_LOGINS   owner/dev gate
   GITHUB_TOKEN             optional secret, read-only public token; raises GitHub rate limit for the /news Community tab
   PUBLIC_SITE_URL
@@ -176,7 +183,7 @@ Do not wire Supabase.
 Do not require Trusted Gateway.
 Do not use Claude/Anthropic as first provider.
 Do not create KV/R2 or Firestore unless explicitly approved.
-D1 is approved (2026-09-28) for chat history (and planned: per-account rate limit) only.
+D1 is approved (2026-09-28) for chat history and the per-account daily quota only.
 Firebase is used for authentication only — do not expand its scope without approval.
 Do not rotate, print, commit, or expose secrets.
 ```
@@ -203,7 +210,8 @@ vendor/lsupergen-sdk/    vendored npm build served same-origin (CSP allows 'self
 tools.html               tools catalog (login required)
 news.html                live AI news (login required); assets/news.js renders /api/feed
 src/chat-store.js        D1 chat history (binding DB); every query scoped to user_key = provider:id
-migrations/*.sql         D1 schema (0001_chat_history.sql; applied to agentssdkspace 2026-09-28)
+src/quota.js             D1 daily quota (usage_counters): atomic add-unless-over-limit, refund on failure
+migrations/*.sql         D1 schema (0001_chat_history.sql, 0002_usage_quota.sql; both applied to agentssdkspace 2026-09-29)
 src/feeds.js             news sources + parsers (ported from thanabartbb/main web/src/feeds.js)
 dev.html / dev-code-drop.html   owner-only dev surfaces
 admin.html               legacy, redirected to /dev
@@ -292,7 +300,7 @@ R3  Tools Router V1                           DONE
 R4  /api/chat validation                      DONE
 R5  OpenAI provider with Cloudflare Secret    DONE IN CODE / VERIFY LIVE
 R6  Auth: Google OAuth + Firebase             DONE IN CODE / VERIFY LIVE
-R7  Rate limit / abuse guard                  PARTIAL (in-memory per isolate)
+R7  Rate limit / abuse guard                  DONE IN CODE / VERIFY LIVE (D1 daily quota + in-memory burst guard)
 R8  Chat history persistence (D1)             DONE IN CODE / VERIFY LIVE
 ```
 

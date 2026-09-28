@@ -89,7 +89,7 @@ test('invalid attachments are rejected before any provider call', async () => {
 
 test('attachment names are cleaned and recorded in chat history instead of file data', async () => {
   const saved = [];
-  const statement = (sql, params = []) => ({ bind: (...v) => statement(sql, v), first: async () => null, all: async () => ({ results: [] }), run: async () => saved.push({ sql, params }) });
+  const statement = (sql, params = []) => ({ bind: (...v) => statement(sql, v), first: async () => (/RETURNING units/.test(sql) ? { units: 1 } : null), all: async () => ({ results: [] }), run: async () => saved.push({ sql, params }) });
   const DB = { prepare: (sql) => statement(sql), batch: async (list) => { for (const s of list) await s.run(); } };
   const { response } = await capture(() => chat({ message: 'ดูหน่อย', attachments: [{ name: 'bad\u0000name.png', data: PNG }] }, { OPENAI_API_KEY: 'k', AUTH_SESSION_SECRET: SESSION_SECRET, DB }));
   assert.equal((await response.json()).history_saved, true);
@@ -129,7 +129,7 @@ test('with attachments, a 400 that is not about image support is not retried on 
 
 test('the attachment note is dropped when it would push a history turn past 12,000 characters', async () => {
   const saved = [];
-  const statement = (sql, params = []) => ({ bind: (...v) => statement(sql, v), first: async () => null, all: async () => ({ results: [] }), run: async () => saved.push({ sql, params }) });
+  const statement = (sql, params = []) => ({ bind: (...v) => statement(sql, v), first: async () => (/RETURNING units/.test(sql) ? { units: 1 } : null), all: async () => ({ results: [] }), run: async () => saved.push({ sql, params }) });
   const DB = { prepare: (sql) => statement(sql), batch: async (list) => { for (const s of list) await s.run(); } };
   const longText = 'ก'.repeat(11995);
   await capture(() => chat({ message: longText, attachments: [{ name: 'photo.png', data: PNG }] }, { OPENAI_API_KEY: 'k', AUTH_SESSION_SECRET: SESSION_SECRET, DB }));

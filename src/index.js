@@ -1,5 +1,6 @@
 import { getFeed, SOURCES as FEED_SOURCES } from './feeds.js';
 import { historyEnabled, userKey, listConversations, getConversation, deleteConversation, saveExchange } from './chat-store.js';
+import { takeQuota, quotaHeaders, quotaMessage } from './quota.js';
 
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const RATE_LIMIT_MAX_REQUESTS = 10;
@@ -537,6 +538,10 @@ async function createOpenAIResponse(env, model, input, tool, mode, requestId, st
   return { response, data };
 }
 
+function isOutputCutOff(response) {
+  return Boolean(response && response.incomplete_details && response.incomplete_details.reason === 'max_output_tokens');
+}
+
 function extractSources(data) {
   const collected = [];
   const add = (source) => {
@@ -579,7 +584,8 @@ function isModelAccessError(data) {
 //   {"type":"delta","text":"..."}                       zero or more
 //   {"type":"done","ok":true,"output":"...","sources":[]}   exactly one on success
 //   {"type":"error","ok":false,"message":"..."}          exactly one on failure (no fake output)
-function streamChatResponse(providerResponse, headers, onComplete) {
+// onComplete(output) runs before the done event and may add fields; onFail() runs when no answer was produced.
+function streamChatResponse(providerResponse, headers, { onComplete, onFail } = {}) {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   const { readable, writable } = new TransformStream();
@@ -593,15 +599,21 @@ function streamChatResponse(providerResponse, headers, onComplete) {
       if (event.type === 'response.output_text.delta' && typeof event.delta === 'string') {
         text += event.delta;
         await emit({ type: 'delta', text: event.delta });
-      } else if (event.type === 'response.completed' && event.response) {
+      } else if ((event.type === 'response.completed' || (event.type === 'response.incomplete' && isOutputCutOff(event.response))) && event.response) {
+        // An answer cut off at the output-token cap is still a real answer: deliver it, flagged truncated.
         const output = extractOutputText(event.response) || text.trim();
+        const truncated = event.type === 'response.incomplete';
         finished = true;
-        const extra = output && onComplete ? await onComplete(output) : {};
-        await emit(output
-          ? { type: 'done', ok: true, status: 'completed', output, sources: extractSources(event.response), ...extra }
-          : { type: 'error', ok: false, status: 'empty_result', message: 'บริการ AI ไม่ได้ส่งข้อความกลับมา กรุณาลองใหม่' });
+        if (!output) {
+          if (onFail) await onFail();
+          await emit({ type: 'error', ok: false, status: 'empty_result', message: 'บริการ AI ไม่ได้ส่งข้อความกลับมา กรุณาลองใหม่' });
+          return;
+        }
+        const extra = onComplete ? await onComplete(output) : {};
+        await emit({ type: 'done', ok: true, status: 'completed', output, sources: extractSources(event.response), ...(truncated ? { truncated: true } : {}), ...extra });
       } else if (event.type === 'response.failed' || event.type === 'response.incomplete' || event.type === 'error') {
         finished = true;
+        if (onFail) await onFail();
         await emit({ type: 'error', ok: false, status: 'service_error', message: 'บริการ AI ตอบไม่ครบ กรุณาลองใหม่' });
       }
     };
@@ -622,9 +634,15 @@ function streamChatResponse(providerResponse, headers, onComplete) {
         }
       }
       if (finished) reader.cancel().catch(() => {});
-      else await emit({ type: 'error', ok: false, status: 'service_error', message: 'การเชื่อมต่อกับบริการ AI ขาดกลางคัน กรุณาลองใหม่' });
+      else {
+        if (onFail) await onFail();
+        await emit({ type: 'error', ok: false, status: 'service_error', message: 'การเชื่อมต่อกับบริการ AI ขาดกลางคัน กรุณาลองใหม่' });
+      }
     } catch (_) {
-      if (!finished) await emit({ type: 'error', ok: false, status: 'service_error', message: 'การเชื่อมต่อกับบริการ AI ขาดกลางคัน กรุณาลองใหม่' }).catch(() => {});
+      if (!finished) {
+        if (onFail) await onFail().catch(() => {});
+        await emit({ type: 'error', ok: false, status: 'service_error', message: 'การเชื่อมต่อกับบริการ AI ขาดกลางคัน กรุณาลองใหม่' }).catch(() => {});
+      }
     } finally {
       await writer.close().catch(() => {});
     }
@@ -675,7 +693,9 @@ async function readJsonLimited(request, maxBytes) {
   try { return { body: JSON.parse(new TextDecoder().decode(bytes)) || {} }; } catch (_) { return { body: {} }; }
 }
 
-async function handleChat(request, env, session = null) {
+// session: signed-in /api/chat user (history is saved). quotaIdentity: whose daily quota to charge —
+// the session for /api/chat, the SDK key's account for /v1/chat.
+async function handleChat(request, env, session = null, quotaIdentity = session) {
   if (request.method !== 'POST') return json({ ok: false, status: 'method_not_allowed', message: 'ส่งคำขอด้วย POST เท่านั้น' }, 405, { allow: 'POST, OPTIONS' });
   const parsed = await readJsonLimited(request, CHAT_BODY_MAX_BYTES).catch(() => ({ body: {} }));
   if (parsed.tooLarge) return json({ ok: false, status: 'payload_too_large', message: 'คำขอใหญ่เกินกำหนด (ไฟล์แนบรวมต้องไม่เกิน 20 MB)' }, 413);
@@ -704,6 +724,10 @@ async function handleChat(request, env, session = null) {
   const input = withAttachments(history ? history.map(({ role, content }) => ({ role, content: content.trim() })) : message, message, attachments.items);
   const recordHistory = historyRecorder(env, session, body.conversation_id, attachmentNote(message, attachments.items));
   if (!env.OPENAI_API_KEY) return json({ ok: false, status: 'service_unavailable', message: 'บริการ AI ยังไม่พร้อมใช้งานในขณะนี้' }, 503, baseHeaders);
+  // Daily quota: a message costs 1, or 2 when it carries attachments.
+  const quota = await takeQuota(env, quotaIdentity, 'chat', attachments.items.length ? 2 : 1, { exempt: isOwnerGoogleSession(quotaIdentity, env) });
+  Object.assign(baseHeaders, quotaHeaders(quota));
+  if (!quota.ok) return json({ ok: false, status: 'quota_exceeded', message: quotaMessage(quota, 'ข้อความ'), reset_at: new Date(quota.resetAt).toISOString() }, 429, { ...baseHeaders, 'retry-after': String(Math.max(1, Math.ceil((quota.resetAt - Date.now()) / 1000))) });
 
   const requestId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
   const webMode = tool === 'research' || tool === 'url';
@@ -716,19 +740,25 @@ async function handleChat(request, env, session = null) {
     try {
       ({ response: providerResponse, data } = await createOpenAIResponse(env, model, input, tool, mode, requestId, stream));
     } catch (_) {
+      await quota.refund();
       return json({ ok: false, status: 'service_error', message: 'เชื่อมต่อบริการ AI ไม่สำเร็จ กรุณาลองใหม่' }, 502, baseHeaders);
     }
-    if (providerResponse.ok && stream) return streamChatResponse(providerResponse, baseHeaders, recordHistory);
+    if (providerResponse.ok && stream) return streamChatResponse(providerResponse, baseHeaders, { onComplete: recordHistory, onFail: quota.refund });
     if (providerResponse.ok) {
       const output = extractOutputText(data);
-      if (!output) return json({ ok: false, status: 'empty_result', message: 'บริการ AI ไม่ได้ส่งข้อความกลับมา กรุณาลองใหม่' }, 502, baseHeaders);
+      if (!output) {
+        await quota.refund();
+        return json({ ok: false, status: 'empty_result', message: 'บริการ AI ไม่ได้ส่งข้อความกลับมา กรุณาลองใหม่' }, 502, baseHeaders);
+      }
       const extra = recordHistory ? await recordHistory(output) : {};
-      return json({ ok: true, status: 'completed', message: output, output, sources: extractSources(data), ...extra }, 200, baseHeaders);
+      const truncated = data.status === 'incomplete' && isOutputCutOff(data) ? { truncated: true } : {};
+      return json({ ok: true, status: 'completed', message: output, output, sources: extractSources(data), ...truncated, ...extra }, 200, baseHeaders);
     }
     lastStatus = providerResponse.status;
     // A model that cannot read images/PDFs rejects the input; try the next one. Other errors stop here.
     if (!isModelAccessError(data) && !(attachments.items.length && isAttachmentSupportError(data))) break;
   }
+  await quota.refund();
   return json({ ok: false, status: 'service_error', message: lastStatus === 429 ? 'บริการ AI ถูกใช้งานหนาแน่น กรุณาลองใหม่อีกครั้ง' : 'บริการ AI ไม่สามารถทำคำขอนี้ได้ในขณะนี้' }, lastStatus === 429 ? 429 : 502, baseHeaders);
 }
 
@@ -758,7 +788,7 @@ async function handleChatHistory(request, env, pathname) {
   }
 }
 
-async function handleImage(request, env) {
+async function handleImage(request, env, quotaIdentity = null) {
   if (request.method !== 'POST') return json({ ok: false, status: 'method_not_allowed', message: 'ส่งคำขอด้วย POST เท่านั้น' }, 405, { allow: 'POST, OPTIONS' });
   let body = {};
   try { body = await request.json(); } catch (_) { body = {}; }
@@ -769,6 +799,9 @@ async function handleImage(request, env) {
   const baseHeaders = rateLimitHeaders(rate);
   if (rate.limited) return json({ ok: false, status: 'rate_limited', message: 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองอีกครั้ง' }, 429, baseHeaders);
   if (!env.OPENAI_API_KEY) return json({ ok: false, status: 'service_unavailable', message: 'บริการสร้างภาพยังไม่พร้อมใช้งานในขณะนี้' }, 503, baseHeaders);
+  const quota = await takeQuota(env, quotaIdentity, 'image', 1, { exempt: isOwnerGoogleSession(quotaIdentity, env) });
+  Object.assign(baseHeaders, quotaHeaders(quota));
+  if (!quota.ok) return json({ ok: false, status: 'quota_exceeded', message: quotaMessage(quota, 'การสร้างภาพ'), reset_at: new Date(quota.resetAt).toISOString() }, 429, { ...baseHeaders, 'retry-after': String(Math.max(1, Math.ceil((quota.resetAt - Date.now()) / 1000))) });
 
   const requestId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
   const models = ['gpt-image-2', 'gpt-image-1.5', 'gpt-image-1', 'gpt-image-1-mini'];
@@ -780,7 +813,10 @@ async function handleImage(request, env) {
       headers: { authorization: 'Bearer ' + env.OPENAI_API_KEY, 'content-type': 'application/json', 'x-client-request-id': requestId },
       body: JSON.stringify({ model, prompt })
     }).catch(() => null);
-    if (!response) return json({ ok: false, status: 'service_error', message: 'เชื่อมต่อบริการสร้างภาพไม่สำเร็จ กรุณาลองใหม่' }, 502, baseHeaders);
+    if (!response) {
+      await quota.refund();
+      return json({ ok: false, status: 'service_error', message: 'เชื่อมต่อบริการสร้างภาพไม่สำเร็จ กรุณาลองใหม่' }, 502, baseHeaders);
+    }
 
     const raw = await response.text();
     let data = {};
@@ -788,7 +824,10 @@ async function handleImage(request, env) {
     if (response.ok) {
       const item = Array.isArray(data.data) ? data.data[0] : null;
       const imageBase64 = item && typeof item.b64_json === 'string' ? item.b64_json : '';
-      if (!imageBase64) return json({ ok: false, status: 'empty_result', message: 'บริการสร้างภาพไม่ได้ส่งไฟล์ภาพกลับมา กรุณาลองใหม่' }, 502, baseHeaders);
+      if (!imageBase64) {
+        await quota.refund();
+        return json({ ok: false, status: 'empty_result', message: 'บริการสร้างภาพไม่ได้ส่งไฟล์ภาพกลับมา กรุณาลองใหม่' }, 502, baseHeaders);
+      }
       return json({ ok: true, status: 'completed', image: { mime_type: 'image/png', data_base64: imageBase64, filename: 'lsuperagen-image.png', revised_prompt: item && typeof item.revised_prompt === 'string' ? item.revised_prompt : null } }, 200, baseHeaders);
     }
     lastData = data;
@@ -798,6 +837,7 @@ async function handleImage(request, env) {
     const modelUnavailable = /model_not_found|invalid model|model .* not found|does not have access/i.test(providerCode + ' ' + providerMessage);
     if (response.status === 401 || response.status === 429 || (response.status >= 400 && response.status < 500 && !modelUnavailable)) break;
   }
+  await quota.refund();
   return json({
     ok: false,
     status: 'service_error',
@@ -910,7 +950,8 @@ async function handleSdkApi(request, env, pathname) {
   if (!key) return sdkJson({ ok: false, error: 'invalid_api_key', message: 'Missing, invalid, or expired API key. Create one at /keys.' }, 401, { 'www-authenticate': 'Bearer' });
   if (request.method !== routes[pathname]) return sdkJson({ ok: false, error: 'method_not_allowed', message: 'Use ' + routes[pathname] }, 405, { allow: routes[pathname] + ', OPTIONS' });
   if (pathname === '/v1/me') return sdkJson({ ok: true, user: { provider: key.provider, id: key.id, email: key.email, name: key.name }, key: sdkKeyInfo(key) });
-  return withSdkHeaders(pathname === '/v1/chat' ? await handleChat(request, env) : await handleImage(request, env));
+  // SDK calls are charged to the key owner's daily quota; they never save chat history.
+  return withSdkHeaders(pathname === '/v1/chat' ? await handleChat(request, env, null, key) : await handleImage(request, env, key));
 }
 
 async function handleFeed(request, env, url) {
@@ -1005,7 +1046,7 @@ export default {
     }
     if (pathname === '/api/chat') return handleChat(request, env, await currentSession(request, env));
     if (pathname === '/api/chats' || pathname.startsWith('/api/chats/')) return handleChatHistory(request, env, pathname);
-    if (pathname === '/api/image') return handleImage(request, env);
+    if (pathname === '/api/image') return handleImage(request, env, await currentSession(request, env));
     if (pathname === '/api/exa/search') return handleExaSearch(request, env);
 
     if (pathname === '/api/feed') return handleFeed(request, env, url);
