@@ -1,0 +1,36 @@
+/* Two low contrast accents sit on a fully opaque black canvas. */
+:root {
+  --mode-accent: #91a7bd;
+  --mode-accent-strong: #b2c0ce;
+  --mode-accent-soft: #c5cfda;
+  --mode-glow: rgba(145, 167, 189, .055);
+}
+html[data-theme="docs"] {
+  --mode-accent: #70568f;
+  --mode-accent-strong: #9276b3;
+  --mode-accent-soft: #b09acb;
+  --mode-glow: rgba(112, 86, 143, .07);
+}
+html, body, body.sdk-layout { background-color: #000000 !important; }
+.theme-toggle { background: #000000 !important; opacity: 1 !important; }
+html[data-theme="docs"] .theme-toggle,
+html[data-theme="docs"] .btn-primary {
+  color: #ffffff !important;
+  background: #594675 !important;
+  border-color: #70568f !important;
+}
+html[data-theme="docs"] .theme-toggle:hover,
+html[data-theme="docs"] .btn-primary:hover { background: #665181 !important; }
+html[data-theme="docs"] .btn-secondary,
+html[data-theme="docs"] .topnav .login { background-color: #000000 !important; }
+html[data-theme="normal"] button.run,
+html[data-theme="normal"] button.primary { color: #ffffff !important; background: #000000 !important; }
+.theme-toggle-label { color: #a3aab3; }
+html[data-theme="docs"] .theme-toggle-label { color: #b09acb; }
+.topbar, .sdk-site-header { background: #000000 !important; }
+.feature, .news-card, .chip, .step, .fact, pre,
+button[role="tab"], .tab {
+  background: #000000 !important;
+  opacity: 1 !important;
+}
+.news-card:hover { background: #000000 !important; }

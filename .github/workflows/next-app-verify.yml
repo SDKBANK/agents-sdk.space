@@ -1,0 +1,27 @@
+name: Next.js migration verify
+on:
+  pull_request:
+    paths: ['next-app/**', '.github/workflows/next-app-verify.yml']
+  push:
+    branches: ['codex/nextjs-loading-migration']
+    paths: ['next-app/**', '.github/workflows/next-app-verify.yml']
+permissions:
+  contents: read
+jobs:
+  next-app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: next-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: next-app/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
