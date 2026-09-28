@@ -397,6 +397,48 @@ function normalizeTool(value) {
   return Object.prototype.hasOwnProperty.call(TOOL_LABELS, tool) ? tool : 'invalid';
 }
 
+// Chat attachments: images and PDFs sent inline as base64 data URLs with the current user turn.
+// They go to the model only; chat history stores just their names (no file storage).
+const ATTACHMENT_MAX_COUNT = 4;
+const ATTACHMENT_MAX_BYTES = { image: 5 * 1024 * 1024, pdf: 10 * 1024 * 1024 };
+const ATTACHMENT_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
+const ATTACHMENT_KINDS = { 'image/png': 'image', 'image/jpeg': 'image', 'image/webp': 'image', 'image/gif': 'image', 'application/pdf': 'pdf' };
+const DATA_URL_PATTERN = /^data:([a-z]+\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/]*={0,2})$/;
+
+function parseAttachments(value) {
+  if (value === undefined || value === null) return { items: [] };
+  if (!Array.isArray(value) || value.length > ATTACHMENT_MAX_COUNT) return { error: 'แนบไฟล์ได้สูงสุด ' + ATTACHMENT_MAX_COUNT + ' ไฟล์ต่อข้อความ' };
+  const items = [];
+  let total = 0;
+  for (const entry of value) {
+    const match = entry && typeof entry.data === 'string' ? DATA_URL_PATTERN.exec(entry.data) : null;
+    const kind = match ? ATTACHMENT_KINDS[match[1]] : null;
+    if (!kind) return { error: 'รองรับเฉพาะรูปภาพ (PNG, JPEG, WebP, GIF) และ PDF' };
+    const base64 = match[2];
+    const bytes = Math.floor(base64.length * 3 / 4) - (base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0);
+    if (!bytes) return { error: 'ไฟล์แนบว่างเปล่า' };
+    if (bytes > ATTACHMENT_MAX_BYTES[kind]) return { error: kind === 'pdf' ? 'ไฟล์ PDF ต้องไม่เกิน 10 MB' : 'รูปภาพต้องไม่เกิน 5 MB' };
+    total += bytes;
+    if (total > ATTACHMENT_MAX_TOTAL_BYTES) return { error: 'ไฟล์แนบรวมกันต้องไม่เกิน 20 MB' };
+    const fallbackName = kind === 'pdf' ? 'document.pdf' : 'image';
+    const name = typeof entry.name === 'string' ? entry.name.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 120) || fallbackName : fallbackName;
+    items.push({ kind, name, data: entry.data });
+  }
+  return { items };
+}
+
+function withAttachments(input, message, attachments) {
+  if (!attachments.length) return input;
+  const content = [{ type: 'input_text', text: message }].concat(attachments.map((item) => item.kind === 'image'
+    ? { type: 'input_image', image_url: item.data, detail: 'auto' }
+    : { type: 'input_file', filename: item.name, file_data: item.data }));
+  return Array.isArray(input) ? input.slice(0, -1).concat({ role: 'user', content }) : [{ role: 'user', content }];
+}
+
+function attachmentNote(message, attachments) {
+  return attachments.length ? message + '\n\n📎 ' + attachments.map((item) => item.name).join(', ') : message;
+}
+
 function inferTool(body, request) {
   const direct = normalizeTool(body.tool);
   if (direct !== null) return direct;
@@ -608,11 +650,13 @@ async function handleChat(request, env, session = null) {
     history.reduce((sum, turn) => sum + turn.content.length, 0) > 120000
   )) return json({ ok: false, status: 'validation_error', message: 'ประวัติแชทไม่ถูกต้องหรือยาวเกินกำหนด' }, 400);
   const message = history ? history[history.length - 1].content.trim() : typeof body.message === 'string' ? body.message.trim() : '';
-  const input = history ? history.map(({ role, content }) => ({ role, content: content.trim() })) : message;
+  const attachments = parseAttachments(body.attachments);
+  if (attachments.error) return json({ ok: false, status: 'validation_error', message: attachments.error }, 400);
+  const input = withAttachments(history ? history.map(({ role, content }) => ({ role, content: content.trim() })) : message, message, attachments.items);
   const mode = typeof body.mode === 'string' && body.mode.trim() ? body.mode.trim().slice(0, 32) : 'chat';
   const tool = inferTool(body, request);
   const stream = body.stream === true;
-  const recordHistory = historyRecorder(env, session, body.conversation_id, message);
+  const recordHistory = historyRecorder(env, session, body.conversation_id, attachmentNote(message, attachments.items));
   if (!message) return json({ ok: false, status: 'validation_error', message: 'กรุณาใส่ข้อความก่อนส่ง' }, 400);
   if (message.length > 120000) return json({ ok: false, status: 'validation_error', message: 'ข้อความยาวเกินขีดจำกัด 120,000 ตัวอักษร กรุณาแบ่งเป็นส่วนย่อย' }, 413);
   if (tool === 'invalid') return json({ ok: false, status: 'validation_error', message: 'โหมดที่ส่งมาไม่ถูกต้อง' }, 400);
@@ -642,7 +686,8 @@ async function handleChat(request, env, session = null) {
       return json({ ok: true, status: 'completed', message: output, output, sources: extractSources(data), ...extra }, 200, baseHeaders);
     }
     lastStatus = providerResponse.status;
-    if (!isModelAccessError(data)) break;
+    // A model that cannot read images/PDFs rejects the input with 400; try the next one.
+    if (!isModelAccessError(data) && !(attachments.items.length && providerResponse.status === 400)) break;
   }
   return json({ ok: false, status: 'service_error', message: lastStatus === 429 ? 'บริการ AI ถูกใช้งานหนาแน่น กรุณาลองใหม่อีกครั้ง' : 'บริการ AI ไม่สามารถทำคำขอนี้ได้ในขณะนี้' }, lastStatus === 429 ? 429 : 502, baseHeaders);
 }

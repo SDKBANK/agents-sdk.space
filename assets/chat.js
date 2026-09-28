@@ -117,6 +117,114 @@
     if (opening) await loadHistoryList();
   });
 
+  // Attachments: images are shrunk in the browser before upload; PDFs are sent as-is.
+  const MAX_FILES = 4;
+  const MAX_IMAGE_SIDE = 1600;
+  const MAX_PDF_BYTES = 10 * 1024 * 1024;
+  const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+  const pending = [];
+  const pendingBox = $('pending');
+  const attachButton = $('attach');
+  const fileInput = $('file');
+
+  const readDataUrl = (blob) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+
+  async function prepareImage(file) {
+    if (file.type === 'image/gif' && file.size <= 2 * 1024 * 1024) return readDataUrl(file);
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(bitmap.width, bitmap.height));
+    if (scale === 1 && file.size <= 1024 * 1024 && file.type !== 'image/gif') {
+      bitmap.close();
+      return readDataUrl(file);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    return canvas.toDataURL('image/jpeg', 0.85);
+  }
+
+  function renderPending() {
+    pendingBox.innerHTML = '';
+    pendingBox.hidden = !pending.length;
+    pending.forEach((item, index) => {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      if (item.kind === 'image') {
+        const img = document.createElement('img');
+        img.src = item.data;
+        img.alt = '';
+        chip.append(img);
+      } else {
+        const icon = document.createElement('div');
+        icon.className = 'pdf';
+        icon.textContent = 'PDF';
+        chip.append(icon);
+      }
+      const name = document.createElement('span');
+      name.textContent = item.name;
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = '×';
+      remove.setAttribute('aria-label', 'เอา ' + item.name + ' ออก');
+      remove.addEventListener('click', () => { pending.splice(index, 1); renderPending(); });
+      chip.append(name, remove);
+      pendingBox.append(chip);
+    });
+  }
+
+  async function addFiles(files) {
+    for (const file of files) {
+      if (pending.length >= MAX_FILES) { bubble('e', 'แนบได้สูงสุด ' + MAX_FILES + ' ไฟล์ต่อข้อความ'); break; }
+      try {
+        if (IMAGE_TYPES.includes(file.type)) {
+          pending.push({ kind: 'image', name: file.name || 'image', data: await prepareImage(file) });
+        } else if (file.type === 'application/pdf') {
+          if (file.size > MAX_PDF_BYTES) { bubble('e', file.name + ': ไฟล์ PDF ต้องไม่เกิน 10 MB'); continue; }
+          pending.push({ kind: 'pdf', name: file.name || 'document.pdf', data: await readDataUrl(file) });
+        } else {
+          bubble('e', (file.name || 'ไฟล์') + ': รองรับเฉพาะรูปภาพ (PNG, JPEG, WebP, GIF) และ PDF');
+        }
+      } catch (_) {
+        bubble('e', (file.name || 'ไฟล์') + ': อ่านไฟล์ไม่ได้');
+      }
+    }
+    renderPending();
+  }
+
+  attachButton.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async () => {
+    await addFiles(Array.from(fileInput.files || []));
+    fileInput.value = '';
+  });
+  input.addEventListener('paste', (event) => {
+    const files = Array.from(event.clipboardData?.files || []);
+    if (!files.length) return;
+    event.preventDefault();
+    addFiles(files);
+  });
+  chat.addEventListener('dragover', (event) => {
+    if (attachButton.disabled || !event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    chat.classList.add('dragging');
+  });
+  chat.addEventListener('dragleave', () => chat.classList.remove('dragging'));
+  chat.addEventListener('drop', (event) => {
+    chat.classList.remove('dragging');
+    if (attachButton.disabled || !event.dataTransfer?.files.length) return;
+    event.preventDefault();
+    addFiles(Array.from(event.dataTransfer.files));
+  });
+
   function bubble(kind, text, meta) {
     $('empty')?.remove();
     const node = document.createElement('div');
@@ -160,13 +268,42 @@
 
   $('composer').addEventListener('submit', async (event) => {
     event.preventDefault();
-    const text = input.value.trim();
-    if (!text || send.disabled) return;
+    const files = pending.splice(0);
+    const text = input.value.trim() || (files.length ? 'ช่วยดูไฟล์ที่แนบมา' : '');
+    if (!text || send.disabled) {
+      pending.push(...files);
+      return;
+    }
 
     input.value = '';
     input.style.height = 'auto';
-    bubble('u', text);
-    turns.push({ role: 'user', content: text });
+    renderPending();
+    const userNode = bubble('u', text);
+    if (files.length) {
+      const strip = document.createElement('div');
+      strip.className = 'files';
+      for (const item of files) {
+        if (item.kind === 'image') {
+          const img = document.createElement('img');
+          img.src = item.data;
+          img.alt = item.name;
+          strip.append(img);
+        } else {
+          const label = document.createElement('span');
+          label.className = 'file-name';
+          label.textContent = '📎 ' + item.name;
+          strip.append(label);
+        }
+      }
+      userNode.prepend(strip);
+    }
+    const restoreFiles = () => {
+      if (!files.length) return;
+      pending.unshift(...files.slice(0, MAX_FILES - pending.length));
+      renderPending();
+    };
+    const userTurn = { role: 'user', content: text };
+    turns.push(userTurn);
     while (turns.length > MAX_TURNS) turns.shift();
     if (turns[0]?.role !== 'user') turns.shift();
 
@@ -179,7 +316,7 @@
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ message: text, messages: turns, mode, stream: true, ...(conversationId ? { conversation_id: conversationId } : {}), ...(mode === 'code' ? { tool: 'code' } : {}) }),
+        body: JSON.stringify({ message: text, messages: turns, mode, stream: true, ...(conversationId ? { conversation_id: conversationId } : {}), ...(files.length ? { attachments: files.map(({ name, data }) => ({ name, data })) } : {}), ...(mode === 'code' ? { tool: 'code' } : {}) }),
       });
       const remaining = response.headers.get('x-lsuperagen-rate-remaining');
       const limit = response.headers.get('x-lsuperagen-rate-limit');
@@ -188,6 +325,7 @@
         const result = await response.json().catch(() => ({}));
         wait.remove();
         turns.pop();
+        restoreFiles();
         if (response.status === 401) return toLogin();
         bubble('e', result.message || 'ส่งข้อความไม่สำเร็จ (' + response.status + ')');
         return;
@@ -227,11 +365,14 @@
       wait.remove();
       if (!final || !final.ok) {
         turns.pop();
+        restoreFiles();
         if (answerNode) answerNode.classList.add('e');
         bubble('e', (final && final.message) || 'การเชื่อมต่อขาดกลางคัน ลองใหม่อีกครั้ง');
         return;
       }
       const answer = final.output || streamed;
+      // Later turns only carry the file names, matching what chat history stores.
+      if (files.length) userTurn.content = text + '\n\n📎 ' + files.map((item) => item.name).join(', ');
       turns.push({ role: 'assistant', content: answer });
       if (final.conversation_id) {
         setConversation(final.conversation_id);
@@ -248,6 +389,7 @@
       wait.remove();
       if (answerNode) answerNode.classList.add('e');
       turns.pop();
+      restoreFiles();
       bubble('e', 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ลองใหม่อีกครั้ง');
     } finally {
       send.disabled = false;
@@ -264,6 +406,7 @@
       model.innerHTML = '<option>OpenAI</option>';
       input.disabled = false;
       send.disabled = false;
+      attachButton.disabled = false;
       const probe = await fetch('/api/chats', { credentials: 'same-origin', cache: 'no-store' }).catch(() => null);
       historyAvailable = Boolean(probe && probe.ok);
       historyToggle.hidden = !historyAvailable;
