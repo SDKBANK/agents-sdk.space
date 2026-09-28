@@ -454,7 +454,7 @@ function rateLimitHeaders(result) {
   return { 'x-lsuperagen-rate-limit': String(result.limit), 'x-lsuperagen-rate-remaining': String(result.remaining), 'x-lsuperagen-rate-reset': new Date(result.resetAt).toISOString(), ...(result.limited ? { 'retry-after': String(result.retryAfter) } : {}) };
 }
 
-async function createOpenAIResponse(env, model, input, tool, mode, requestId) {
+async function createOpenAIResponse(env, model, input, tool, mode, requestId, stream = false) {
   const usesWeb = tool === 'research' || tool === 'url';
   const payload = {
     model,
@@ -464,6 +464,7 @@ async function createOpenAIResponse(env, model, input, tool, mode, requestId) {
     store: false,
     metadata: { app: 'lsuperagen.docs', surface: 'public-workspace', tool: tool || 'chat', mode }
   };
+  if (stream) payload.stream = true;
   if (usesWeb) {
     payload.tools = [{ type: 'web_search' }];
     payload.tool_choice = 'required';
@@ -474,6 +475,8 @@ async function createOpenAIResponse(env, model, input, tool, mode, requestId) {
     headers: { authorization: 'Bearer ' + env.OPENAI_API_KEY, 'content-type': 'application/json', 'x-client-request-id': requestId },
     body: JSON.stringify(payload)
   });
+  // A streamed success is returned unread so the caller can pipe it; errors are always plain JSON.
+  if (stream && response.ok) return { response, data: null };
   const raw = await response.text();
   let data = {};
   try { data = raw ? JSON.parse(raw) : {}; } catch (_) { data = {}; }
@@ -518,6 +521,65 @@ function isModelAccessError(data) {
   return /does not have access to model|model .* not found|invalid model|not exist|do not have access/i.test(msg);
 }
 
+// Streamed chat: relays OpenAI Responses SSE as NDJSON lines the browser can read incrementally.
+//   {"type":"delta","text":"..."}                       zero or more
+//   {"type":"done","ok":true,"output":"...","sources":[]}   exactly one on success
+//   {"type":"error","ok":false,"message":"..."}          exactly one on failure (no fake output)
+function streamChatResponse(providerResponse, headers) {
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const emit = (event) => writer.write(encoder.encode(JSON.stringify(event) + '\n'));
+  (async () => {
+    let buffer = '';
+    let text = '';
+    let finished = false;
+    const handle = async (event) => {
+      if (event.type === 'response.output_text.delta' && typeof event.delta === 'string') {
+        text += event.delta;
+        await emit({ type: 'delta', text: event.delta });
+      } else if (event.type === 'response.completed' && event.response) {
+        const output = extractOutputText(event.response) || text.trim();
+        finished = true;
+        await emit(output
+          ? { type: 'done', ok: true, status: 'completed', output, sources: extractSources(event.response) }
+          : { type: 'error', ok: false, status: 'empty_result', message: 'บริการ AI ไม่ได้ส่งข้อความกลับมา กรุณาลองใหม่' });
+      } else if (event.type === 'response.failed' || event.type === 'response.incomplete' || event.type === 'error') {
+        finished = true;
+        await emit({ type: 'error', ok: false, status: 'service_error', message: 'บริการ AI ตอบไม่ครบ กรุณาลองใหม่' });
+      }
+    };
+    try {
+      const reader = providerResponse.body.getReader();
+      while (!finished) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let cut;
+        while (!finished && (cut = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.slice(0, cut).trim();
+          buffer = buffer.slice(cut + 1);
+          if (!line.startsWith('data:')) continue;
+          let event;
+          try { event = JSON.parse(line.slice(5).trim()); } catch (_) { continue; }
+          await handle(event);
+        }
+      }
+      if (finished) reader.cancel().catch(() => {});
+      else await emit({ type: 'error', ok: false, status: 'service_error', message: 'การเชื่อมต่อกับบริการ AI ขาดกลางคัน กรุณาลองใหม่' });
+    } catch (_) {
+      if (!finished) await emit({ type: 'error', ok: false, status: 'service_error', message: 'การเชื่อมต่อกับบริการ AI ขาดกลางคัน กรุณาลองใหม่' }).catch(() => {});
+    } finally {
+      await writer.close().catch(() => {});
+    }
+  })();
+  return new Response(readable, {
+    status: 200,
+    headers: { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...headers }
+  });
+}
+
 async function handleChat(request, env) {
   if (request.method !== 'POST') return json({ ok: false, status: 'method_not_allowed', message: 'ส่งคำขอด้วย POST เท่านั้น' }, 405, { allow: 'POST, OPTIONS' });
   let body = {};
@@ -534,6 +596,7 @@ async function handleChat(request, env) {
   const input = history ? history.map(({ role, content }) => ({ role, content: content.trim() })) : message;
   const mode = typeof body.mode === 'string' && body.mode.trim() ? body.mode.trim().slice(0, 32) : 'chat';
   const tool = inferTool(body, request);
+  const stream = body.stream === true;
   if (!message) return json({ ok: false, status: 'validation_error', message: 'กรุณาใส่ข้อความก่อนส่ง' }, 400);
   if (message.length > 120000) return json({ ok: false, status: 'validation_error', message: 'ข้อความยาวเกินขีดจำกัด 120,000 ตัวอักษร กรุณาแบ่งเป็นส่วนย่อย' }, 413);
   if (tool === 'invalid') return json({ ok: false, status: 'validation_error', message: 'โหมดที่ส่งมาไม่ถูกต้อง' }, 400);
@@ -551,10 +614,11 @@ async function handleChat(request, env) {
   for (const model of candidates) {
     let providerResponse, data;
     try {
-      ({ response: providerResponse, data } = await createOpenAIResponse(env, model, input, tool, mode, requestId));
+      ({ response: providerResponse, data } = await createOpenAIResponse(env, model, input, tool, mode, requestId, stream));
     } catch (_) {
       return json({ ok: false, status: 'service_error', message: 'เชื่อมต่อบริการ AI ไม่สำเร็จ กรุณาลองใหม่' }, 502, baseHeaders);
     }
+    if (providerResponse.ok && stream) return streamChatResponse(providerResponse, baseHeaders);
     if (providerResponse.ok) {
       const output = extractOutputText(data);
       if (!output) return json({ ok: false, status: 'empty_result', message: 'บริการ AI ไม่ได้ส่งข้อความกลับมา กรุณาลองใหม่' }, 502, baseHeaders);

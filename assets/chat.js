@@ -72,29 +72,76 @@
     send.disabled = true;
     const wait = bubble('a', 'กำลังคิด');
     wait.classList.add('thinking');
+    let answerNode = null;
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ message: text, messages: turns, mode, ...(mode === 'code' ? { tool: 'code' } : {}) }),
+        body: JSON.stringify({ message: text, messages: turns, mode, stream: true, ...(mode === 'code' ? { tool: 'code' } : {}) }),
       });
-      const result = await response.json().catch(() => ({}));
-      wait.remove();
-      if (!response.ok || !result.ok) {
+      const remaining = response.headers.get('x-lsuperagen-rate-remaining');
+      const limit = response.headers.get('x-lsuperagen-rate-limit');
+      if (remaining !== null && limit) quota.textContent = 'เหลือในรอบนี้ ' + remaining + '/' + limit;
+      if (!response.ok || !(response.headers.get('content-type') || '').includes('ndjson')) {
+        const result = await response.json().catch(() => ({}));
+        wait.remove();
         turns.pop();
         if (response.status === 401) return toLogin();
         bubble('e', result.message || 'ส่งข้อความไม่สำเร็จ (' + response.status + ')');
         return;
       }
-      const answer = result.output || result.message;
+
+      // Stream: render each delta as it arrives; only a "done" event commits the turn.
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let streamed = '';
+      let final = null;
+      const onEvent = (event) => {
+        if (event.type === 'delta' && typeof event.text === 'string') {
+          if (!answerNode) {
+            wait.remove();
+            answerNode = bubble('a', '');
+          }
+          streamed += event.text;
+          answerNode.textContent = streamed;
+          chat.scrollTop = chat.scrollHeight;
+        } else if (event.type === 'done' || event.type === 'error') {
+          final = event;
+        }
+      };
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let cut;
+        while ((cut = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.slice(0, cut).trim();
+          buffer = buffer.slice(cut + 1);
+          if (!line) continue;
+          try { onEvent(JSON.parse(line)); } catch (_) { /* ignore a malformed line */ }
+        }
+      }
+      wait.remove();
+      if (!final || !final.ok) {
+        turns.pop();
+        if (answerNode) answerNode.classList.add('e');
+        bubble('e', (final && final.message) || 'การเชื่อมต่อขาดกลางคัน ลองใหม่อีกครั้ง');
+        return;
+      }
+      const answer = final.output || streamed;
       turns.push({ role: 'assistant', content: answer });
-      bubble('a', answer, result.model || 'AI');
-      const remaining = response.headers.get('x-lsuperagen-rate-remaining');
-      const limit = response.headers.get('x-lsuperagen-rate-limit');
-      if (remaining !== null && limit) quota.textContent = 'เหลือในรอบนี้ ' + remaining + '/' + limit;
+      if (!answerNode) answerNode = bubble('a', '');
+      answerNode.textContent = answer;
+      const label = document.createElement('span');
+      label.className = 'meta';
+      label.textContent = 'AI';
+      answerNode.append(label);
+      chat.scrollTop = chat.scrollHeight;
     } catch (_) {
       wait.remove();
+      if (answerNode) answerNode.classList.add('e');
       turns.pop();
       bubble('e', 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ลองใหม่อีกครั้ง');
     } finally {
