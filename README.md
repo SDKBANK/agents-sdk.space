@@ -2,8 +2,8 @@
 
 AI Framework: **LSUPERAGENT public AI workspace**
 
-Last updated: **2026-09-27T20:28:18+07:00 Asia/Bangkok**
-Last update task: **Refresh sitewide editorial copy, compact branding, and optional Kantalad typography.**
+Last updated: **2026-09-28T20:12:17+07:00 Asia/Bangkok**
+Last update task: **Begin owner-authorized Next.js migration with a native /loading route in next-app/.**
 
 The proposed one-owner session continuity system is specified in [`docs/session-continuity-pilot.md`](docs/session-continuity-pilot.md). It is design-only; no database or resumable chat runtime has been created.
 
@@ -148,3 +148,8 @@ Build task-oriented page copy so visitors can identify an input, follow an appro
 Content fields: heading and lead are static strings sourced from each HTML page; required on content pages. Brand asset is /logo.svg. Font preference is a CSS family from assets/editorial.css and assets/theme.css. Kantalad Cnd Bold is a local-font trial only; no licensed webfont file is present, so other devices use the fallback stack. Code retains monospace. Auth and API contracts are unchanged.
 
 Acceptance: remove the entire AI WORKSPACE intro row; reduce header brand size and spacing; revise all docs introductions toward application and outcome; preserve form IDs, action URLs and runtime scripts. Deployment is unverified until a live check confirms the new revision.
+
+
+## Next.js migration — 2026-09-28
+
+The owner authorized beginning the Next.js migration. `next-app/` is the isolated migration app; production remains the existing Worker/static site until cutover is verified. `/loading` is native React with shared header/footer, React theme state and a React copyable code window. See `next-app/README.md` for run commands, route/data contract, evidence and next stages. This authorization changes the frontend direction only; it does not migrate hosting or authentication. `.assetsignore` excludes the entire migration app from the existing Worker static asset upload.
