@@ -204,16 +204,17 @@
     attachButton.disabled = sending || input.disabled;
   }
 
-  async function addFiles(files) {
-    if (sending) return;
+  // Batches are prepared one after another, so the 4-file limit is checked against settled results.
+  let intake = Promise.resolve();
+  function addFiles(files) {
+    if (sending) return intake;
     preparing += 1;
     syncControls();
-    try {
-      await addFilesNow(files);
-    } finally {
+    intake = intake.then(() => addFilesNow(files)).catch(() => {}).finally(() => {
       preparing -= 1;
       syncControls();
-    }
+    });
+    return intake;
   }
 
   async function addFilesNow(files) {

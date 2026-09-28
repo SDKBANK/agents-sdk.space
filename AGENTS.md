@@ -36,9 +36,10 @@ exa_search_endpoint: POST /api/exa/search (signed session; Cloudflare Worker EXA
 owner_workspace: /dev
 control_reference: /dev/control-plane/
 control_alias: /control -> /dev
-database_storage: none_currently
+database_storage: d1_agentssdkspace_binding_DB_chat_history  # approved 2026-09-28; schema migrations/0001_chat_history.sql
 continuity_pilot_storage:
-  D1: allowed_for_one_owner_pilot_with_schema_cost_review_and_tests
+  D1: active_for_chat_history; further use needs schema_cost_review_and_tests
+attachment_storage: none  # attachments reach the model only; history keeps file names
 forbidden_without_approval:
   - unrelated_R2_or_KV_resources
   - new auth platform migration
