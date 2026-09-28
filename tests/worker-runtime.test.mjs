@@ -253,3 +253,61 @@ test('AI APIs reject requests without a signed user session', async () => {
   assert.equal(response.status, 401);
   assert.equal((await response.json()).error, 'authentication_required');
 });
+
+function sseResponse(events) {
+  const body = events.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join('');
+  // Split mid-line to prove the relay buffers partial chunks.
+  const bytes = new TextEncoder().encode(body);
+  const cut = Math.floor(bytes.length / 2);
+  return new Response(new ReadableStream({ start(c) { c.enqueue(bytes.slice(0, cut)); c.enqueue(bytes.slice(cut)); c.close(); } }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+}
+
+async function readNdjson(response) {
+  return (await response.text()).split('\n').filter(Boolean).map((line) => JSON.parse(line));
+}
+
+test('chat streams deltas as NDJSON and finishes with one done event when stream is requested', async () => {
+  await withFetchStub(async (_url, init) => {
+    assert.equal(JSON.parse(init.body).stream, true);
+    return sseResponse([
+      { type: 'response.created', response: { id: 'resp_s' } },
+      { type: 'response.output_text.delta', delta: 'สวัส' },
+      { type: 'response.output_text.delta', delta: 'ดี' },
+      { type: 'response.completed', response: { id: 'resp_s', output: [{ type: 'message', content: [{ type: 'output_text', text: 'สวัสดี', annotations: [] }] }] } }
+    ]);
+  }, async () => {
+    const response = await worker.fetch(await request('/api/chat', { message: 'hello', stream: true }), { OPENAI_API_KEY: 'test-key', AUTH_SESSION_SECRET: SESSION_SECRET });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type'), /application\/x-ndjson/);
+    assert.ok(response.headers.get('x-lsuperagen-rate-limit'));
+    const events = await readNdjson(response);
+    assert.deepEqual(events.filter((e) => e.type === 'delta').map((e) => e.text), ['สวัส', 'ดี']);
+    const last = events[events.length - 1];
+    assert.deepEqual(last, { type: 'done', ok: true, status: 'completed', output: 'สวัสดี', sources: [] });
+  });
+});
+
+test('streamed chat reports an error instead of a fake answer when the provider stream breaks', async () => {
+  await withFetchStub(async () => sseResponse([{ type: 'response.output_text.delta', delta: 'ครึ่ง' }]), async () => {
+    const response = await worker.fetch(await request('/api/chat', { message: 'hello', stream: true }), { OPENAI_API_KEY: 'test-key', AUTH_SESSION_SECRET: SESSION_SECRET });
+    const events = await readNdjson(response);
+    assert.equal(events.some((e) => e.type === 'done'), false);
+    assert.equal(events[events.length - 1].type, 'error');
+    assert.equal(events[events.length - 1].ok, false);
+  });
+});
+
+test('streamed chat still falls back to the next model before any bytes are sent', async () => {
+  const models = [];
+  await withFetchStub(async (_url, init) => {
+    const { model } = JSON.parse(init.body);
+    models.push(model);
+    if (models.length === 1) return jsonResponse({ error: { message: 'The model does not exist or you do not have access to it.' } }, 404);
+    return sseResponse([{ type: 'response.completed', response: { output_text: 'ok' } }]);
+  }, async () => {
+    const response = await worker.fetch(await request('/api/chat', { message: 'hello', stream: true }), { OPENAI_API_KEY: 'test-key', AUTH_SESSION_SECRET: SESSION_SECRET });
+    assert.equal(models.length, 2);
+    const events = await readNdjson(response);
+    assert.equal(events[events.length - 1].output, 'ok');
+  });
+});

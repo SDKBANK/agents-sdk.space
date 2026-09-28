@@ -105,6 +105,11 @@ Guide page:   guide.html + assets/guide.js, runs vendor/lsupergen-sdk/0.1.0/inde
 /chat (signed in)
   ↓
 POST /api/chat          rate limit: 10 requests / 10 min (in-memory, per isolate)
+                        body.stream === true → application/x-ndjson:
+                          {"type":"delta","text"} … then one {"type":"done","ok":true,"output","sources"}
+                          or one {"type":"error","ok":false,"message"}; errors before streaming stay JSON
+                        without stream (SDK /v1/chat) → unchanged single JSON response
+                        chat.html (assets/chat.js) always requests stream: true
   ↓
 OpenAI Responses API    model: OPENAI_MODEL first, then built-in fallback list
                         research/url tools use a web-capable model list
