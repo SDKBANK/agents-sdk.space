@@ -115,6 +115,10 @@ POST /api/chat          rate limit: 10 requests / 10 min (in-memory, per isolate
                         signed-in + DB bound → finished exchange saved to D1; response/done event
                           adds conversation_id + history_saved (storage failure → history_saved: false,
                           answer still returned). Client sends conversation_id to continue a chat.
+                        body.attachments: up to 4 × { name, data: base64 data URL } on the current turn
+                          image/png|jpeg|webp|gif ≤5 MB → input_image; application/pdf ≤10 MB → input_file;
+                          ≤20 MB total. Sent to the model only; history stores the names ("📎 a.png"),
+                          never the file data (no R2). chat.js shrinks images to ≤1600px before upload.
   ↓
 OpenAI Responses API    model: OPENAI_MODEL first, then built-in fallback list
                         research/url tools use a web-capable model list

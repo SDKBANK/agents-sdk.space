@@ -397,6 +397,59 @@ function normalizeTool(value) {
   return Object.prototype.hasOwnProperty.call(TOOL_LABELS, tool) ? tool : 'invalid';
 }
 
+// Chat attachments: images and PDFs sent inline as base64 data URLs with the current user turn.
+// They go to the model only; chat history stores just their names (no file storage).
+const ATTACHMENT_MAX_COUNT = 4;
+const ATTACHMENT_MAX_BYTES = { image: 5 * 1024 * 1024, pdf: 10 * 1024 * 1024 };
+const ATTACHMENT_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
+const ATTACHMENT_KINDS = { 'image/png': 'image', 'image/jpeg': 'image', 'image/webp': 'image', 'image/gif': 'image', 'application/pdf': 'pdf' };
+const DATA_URL_PATTERN = /^data:([a-z]+\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/]*={0,2})$/;
+
+function parseAttachments(value) {
+  if (value === undefined || value === null) return { items: [] };
+  if (!Array.isArray(value) || value.length > ATTACHMENT_MAX_COUNT) return { error: 'แนบไฟล์ได้สูงสุด ' + ATTACHMENT_MAX_COUNT + ' ไฟล์ต่อข้อความ' };
+  const items = [];
+  let total = 0;
+  for (const entry of value) {
+    const match = entry && typeof entry.data === 'string' ? DATA_URL_PATTERN.exec(entry.data) : null;
+    const kind = match ? ATTACHMENT_KINDS[match[1]] : null;
+    if (!kind) return { error: 'รองรับเฉพาะรูปภาพ (PNG, JPEG, WebP, GIF) และ PDF' };
+    const base64 = match[2];
+    if (base64.length % 4) return { error: 'ข้อมูลไฟล์แนบไม่ถูกต้อง' };
+    const bytes = Math.floor(base64.length * 3 / 4) - (base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0);
+    if (!bytes) return { error: 'ไฟล์แนบว่างเปล่า' };
+    if (bytes > ATTACHMENT_MAX_BYTES[kind]) return { error: kind === 'pdf' ? 'ไฟล์ PDF ต้องไม่เกิน 10 MB' : 'รูปภาพต้องไม่เกิน 5 MB' };
+    total += bytes;
+    if (total > ATTACHMENT_MAX_TOTAL_BYTES) return { error: 'ไฟล์แนบรวมกันต้องไม่เกิน 20 MB' };
+    const fallbackName = kind === 'pdf' ? 'document.pdf' : 'image';
+    const name = typeof entry.name === 'string' ? entry.name.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 120) || fallbackName : fallbackName;
+    items.push({ kind, name, data: entry.data });
+  }
+  return { items };
+}
+
+function withAttachments(input, message, attachments) {
+  if (!attachments.length) return input;
+  const content = [{ type: 'input_text', text: message }].concat(attachments.map((item) => item.kind === 'image'
+    ? { type: 'input_image', image_url: item.data, detail: 'auto' }
+    : { type: 'input_file', filename: item.name, file_data: item.data }));
+  return Array.isArray(input) ? input.slice(0, -1).concat({ role: 'user', content }) : [{ role: 'user', content }];
+}
+
+// History turns are capped at 12,000 characters, so the note is dropped rather than overflow a turn.
+const HISTORY_TURN_MAX = 12000;
+function attachmentNote(message, attachments) {
+  if (!attachments.length) return message;
+  const noted = message + '\n\n📎 ' + attachments.map((item) => item.name).join(', ');
+  return noted.length <= HISTORY_TURN_MAX ? noted : message;
+}
+
+// Only errors saying the model cannot take image/file input justify trying another model.
+function isAttachmentSupportError(data) {
+  const msg = data && data.error && data.error.message ? String(data.error.message) : '';
+  return /(image|file|pdf|input_image|input_file|content type)[^.]*(not supported|unsupported|only supported|not allowed|does not support)|(does not support|doesn't support|not support)[^.]*(image|file|pdf|vision)/i.test(msg);
+}
+
 function inferTool(body, request) {
   const direct = normalizeTool(body.tool);
   if (direct !== null) return direct;
@@ -595,10 +648,38 @@ function historyRecorder(env, session, conversationId, userText) {
   };
 }
 
+// 20 MB of attachments is ~27 MB as base64, plus up to 120,000 characters of history.
+const CHAT_BODY_MAX_BYTES = 28 * 1024 * 1024;
+
+// Reads a JSON body but stops as soon as it exceeds maxBytes, whatever content-length claims.
+async function readJsonLimited(request, maxBytes) {
+  const declared = Number(request.headers.get('content-length'));
+  if (declared > maxBytes) return { tooLarge: true };
+  if (!request.body) return { body: {} };
+  const reader = request.body.getReader();
+  const chunks = [];
+  let size = 0;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      reader.cancel().catch(() => {});
+      return { tooLarge: true };
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  try { return { body: JSON.parse(new TextDecoder().decode(bytes)) || {} }; } catch (_) { return { body: {} }; }
+}
+
 async function handleChat(request, env, session = null) {
   if (request.method !== 'POST') return json({ ok: false, status: 'method_not_allowed', message: 'ส่งคำขอด้วย POST เท่านั้น' }, 405, { allow: 'POST, OPTIONS' });
-  let body = {};
-  try { body = await request.json(); } catch (_) { body = {}; }
+  const parsed = await readJsonLimited(request, CHAT_BODY_MAX_BYTES).catch(() => ({ body: {} }));
+  if (parsed.tooLarge) return json({ ok: false, status: 'payload_too_large', message: 'คำขอใหญ่เกินกำหนด (ไฟล์แนบรวมต้องไม่เกิน 20 MB)' }, 413);
+  const body = parsed.body && typeof parsed.body === 'object' ? parsed.body : {};
   const history = body.messages;
   if (history !== undefined && (
     !Array.isArray(history) || history.length < 1 || history.length > 20 ||
@@ -608,17 +689,20 @@ async function handleChat(request, env, session = null) {
     history.reduce((sum, turn) => sum + turn.content.length, 0) > 120000
   )) return json({ ok: false, status: 'validation_error', message: 'ประวัติแชทไม่ถูกต้องหรือยาวเกินกำหนด' }, 400);
   const message = history ? history[history.length - 1].content.trim() : typeof body.message === 'string' ? body.message.trim() : '';
-  const input = history ? history.map(({ role, content }) => ({ role, content: content.trim() })) : message;
   const mode = typeof body.mode === 'string' && body.mode.trim() ? body.mode.trim().slice(0, 32) : 'chat';
   const tool = inferTool(body, request);
   const stream = body.stream === true;
-  const recordHistory = historyRecorder(env, session, body.conversation_id, message);
   if (!message) return json({ ok: false, status: 'validation_error', message: 'กรุณาใส่ข้อความก่อนส่ง' }, 400);
   if (message.length > 120000) return json({ ok: false, status: 'validation_error', message: 'ข้อความยาวเกินขีดจำกัด 120,000 ตัวอักษร กรุณาแบ่งเป็นส่วนย่อย' }, 413);
   if (tool === 'invalid') return json({ ok: false, status: 'validation_error', message: 'โหมดที่ส่งมาไม่ถูกต้อง' }, 400);
   const rate = checkRateLimit(request, tool);
   const baseHeaders = rateLimitHeaders(rate);
   if (rate.limited) return json({ ok: false, status: 'rate_limited', message: 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองอีกครั้ง' }, 429, baseHeaders);
+  // Attachments are scanned only after the request has counted against the rate limit.
+  const attachments = parseAttachments(body.attachments);
+  if (attachments.error) return json({ ok: false, status: 'validation_error', message: attachments.error }, 400, baseHeaders);
+  const input = withAttachments(history ? history.map(({ role, content }) => ({ role, content: content.trim() })) : message, message, attachments.items);
+  const recordHistory = historyRecorder(env, session, body.conversation_id, attachmentNote(message, attachments.items));
   if (!env.OPENAI_API_KEY) return json({ ok: false, status: 'service_unavailable', message: 'บริการ AI ยังไม่พร้อมใช้งานในขณะนี้' }, 503, baseHeaders);
 
   const requestId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
@@ -642,7 +726,8 @@ async function handleChat(request, env, session = null) {
       return json({ ok: true, status: 'completed', message: output, output, sources: extractSources(data), ...extra }, 200, baseHeaders);
     }
     lastStatus = providerResponse.status;
-    if (!isModelAccessError(data)) break;
+    // A model that cannot read images/PDFs rejects the input; try the next one. Other errors stop here.
+    if (!isModelAccessError(data) && !(attachments.items.length && isAttachmentSupportError(data))) break;
   }
   return json({ ok: false, status: 'service_error', message: lastStatus === 429 ? 'บริการ AI ถูกใช้งานหนาแน่น กรุณาลองใหม่อีกครั้ง' : 'บริการ AI ไม่สามารถทำคำขอนี้ได้ในขณะนี้' }, lastStatus === 429 ? 429 : 502, baseHeaders);
 }

@@ -117,6 +117,151 @@
     if (opening) await loadHistoryList();
   });
 
+  // Attachments: images are shrunk in the browser before upload; PDFs are sent as-is.
+  const MAX_FILES = 4;
+  const MAX_IMAGE_SIDE = 1600;
+  const MAX_PDF_BYTES = 10 * 1024 * 1024;
+  const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+  const pending = [];
+  let preparing = 0;
+  let sending = false;
+  const pendingBox = $('pending');
+  const attachButton = $('attach');
+  const fileInput = $('file');
+
+  const readDataUrl = (blob) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+
+  function drawJpeg(bitmap, maxSide, quality) {
+    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', quality);
+  }
+
+  // Returns the upload data plus a small thumbnail for the page, so full-size data is not kept in the DOM.
+  // GIFs are always flattened to one frame: vision models reject animated GIFs.
+  async function prepareImage(file, type) {
+    const bitmap = await createImageBitmap(file);
+    try {
+      const small = Math.max(bitmap.width, bitmap.height) <= MAX_IMAGE_SIDE && file.size <= 1024 * 1024;
+      const data = small && type !== 'image/gif' ? await readDataUrl(new Blob([file], { type })) : drawJpeg(bitmap, MAX_IMAGE_SIDE, 0.85);
+      return { data, thumb: drawJpeg(bitmap, 320, 0.8) };
+    } finally {
+      bitmap.close();
+    }
+  }
+
+  // Some browsers/OSes leave File.type empty; fall back to the extension.
+  const EXTENSION_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', pdf: 'application/pdf' };
+  function fileType(file) {
+    if (file.type) return file.type;
+    const ext = (/\.([a-z0-9]+)$/i.exec(file.name || '') || [])[1];
+    return ext ? EXTENSION_TYPES[ext.toLowerCase()] || '' : '';
+  }
+
+  function renderPending() {
+    pendingBox.innerHTML = '';
+    pendingBox.hidden = !pending.length;
+    pending.forEach((item, index) => {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      if (item.kind === 'image') {
+        const img = document.createElement('img');
+        img.src = item.thumb;
+        img.alt = '';
+        chip.append(img);
+      } else {
+        const icon = document.createElement('div');
+        icon.className = 'pdf';
+        icon.textContent = 'PDF';
+        chip.append(icon);
+      }
+      const name = document.createElement('span');
+      name.textContent = item.name;
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = '×';
+      remove.setAttribute('aria-label', 'เอา ' + item.name + ' ออก');
+      remove.disabled = sending;
+      remove.addEventListener('click', () => { if (!sending) { pending.splice(index, 1); renderPending(); } });
+      chip.append(name, remove);
+      pendingBox.append(chip);
+    });
+  }
+
+  function syncControls() {
+    send.disabled = sending || preparing > 0 || input.disabled;
+    attachButton.disabled = sending || input.disabled;
+  }
+
+  // Batches are prepared one after another, so the 4-file limit is checked against settled results.
+  let intake = Promise.resolve();
+  function addFiles(files) {
+    if (sending) return intake;
+    preparing += 1;
+    syncControls();
+    intake = intake.then(() => addFilesNow(files)).catch(() => {}).finally(() => {
+      preparing -= 1;
+      syncControls();
+    });
+    return intake;
+  }
+
+  async function addFilesNow(files) {
+    for (const file of files) {
+      if (pending.length >= MAX_FILES) { bubble('e', 'แนบได้สูงสุด ' + MAX_FILES + ' ไฟล์ต่อข้อความ'); break; }
+      const type = fileType(file);
+      try {
+        if (IMAGE_TYPES.includes(type)) {
+          pending.push({ kind: 'image', name: file.name || 'image', ...(await prepareImage(file, type)) });
+        } else if (type === 'application/pdf') {
+          if (file.size > MAX_PDF_BYTES) { bubble('e', file.name + ': ไฟล์ PDF ต้องไม่เกิน 10 MB'); continue; }
+          pending.push({ kind: 'pdf', name: file.name || 'document.pdf', data: await readDataUrl(new Blob([file], { type })) });
+        } else {
+          bubble('e', (file.name || 'ไฟล์') + ': รองรับเฉพาะรูปภาพ (PNG, JPEG, WebP, GIF) และ PDF');
+        }
+      } catch (_) {
+        bubble('e', (file.name || 'ไฟล์') + ': อ่านไฟล์ไม่ได้');
+      }
+    }
+    renderPending();
+  }
+
+  attachButton.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async () => {
+    await addFiles(Array.from(fileInput.files || []));
+    fileInput.value = '';
+  });
+  input.addEventListener('paste', (event) => {
+    const files = Array.from(event.clipboardData?.files || []);
+    if (!files.length || attachButton.disabled) return;
+    event.preventDefault();
+    addFiles(files);
+  });
+  // File drags are always cancelled (anywhere on the page) so a drop never opens the file and loses the chat.
+  const isFileDrag = (event) => Boolean(event.dataTransfer?.types.includes('Files'));
+  window.addEventListener('dragover', (event) => { if (isFileDrag(event)) event.preventDefault(); });
+  window.addEventListener('drop', (event) => { if (isFileDrag(event)) event.preventDefault(); });
+  chat.addEventListener('dragover', (event) => {
+    if (isFileDrag(event) && !attachButton.disabled) chat.classList.add('dragging');
+  });
+  chat.addEventListener('dragleave', () => chat.classList.remove('dragging'));
+  chat.addEventListener('drop', (event) => {
+    chat.classList.remove('dragging');
+    if (attachButton.disabled || !event.dataTransfer?.files.length) return;
+    addFiles(Array.from(event.dataTransfer.files));
+  });
+
   function bubble(kind, text, meta) {
     $('empty')?.remove();
     const node = document.createElement('div');
@@ -160,17 +305,53 @@
 
   $('composer').addEventListener('submit', async (event) => {
     event.preventDefault();
-    const text = input.value.trim();
-    if (!text || send.disabled) return;
+    if (send.disabled || preparing > 0) return;
+    const files = pending.splice(0);
+    const typed = input.value.trim();
+    const text = typed || (files.length ? 'ช่วยดูไฟล์ที่แนบมา' : '');
+    if (!text) {
+      pending.push(...files);
+      return;
+    }
 
     input.value = '';
     input.style.height = 'auto';
-    bubble('u', text);
-    turns.push({ role: 'user', content: text });
+    renderPending();
+    const userNode = bubble('u', text);
+    if (files.length) {
+      const strip = document.createElement('div');
+      strip.className = 'files';
+      for (const item of files) {
+        if (item.kind === 'image') {
+          const img = document.createElement('img');
+          img.src = item.thumb;
+          img.alt = item.name;
+          strip.append(img);
+        } else {
+          const label = document.createElement('span');
+          label.className = 'file-name';
+          label.textContent = '📎 ' + item.name;
+          strip.append(label);
+        }
+      }
+      userNode.prepend(strip);
+    }
+    // On failure, put the typed prompt and the attachments back so a retry sends the same request.
+    // Attaching is locked while this request runs, so the failed set comes back whole.
+    const restoreFiles = () => {
+      if (typed && !input.value.trim()) input.value = typed;
+      if (!files.length) return;
+      pending.unshift(...files);
+      renderPending();
+    };
+    const userTurn = { role: 'user', content: text };
+    turns.push(userTurn);
     while (turns.length > MAX_TURNS) turns.shift();
     if (turns[0]?.role !== 'user') turns.shift();
 
-    send.disabled = true;
+    sending = true;
+    syncControls();
+    renderPending();
     const wait = bubble('a', 'กำลังคิด');
     wait.classList.add('thinking');
     let answerNode = null;
@@ -179,7 +360,7 @@
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ message: text, messages: turns, mode, stream: true, ...(conversationId ? { conversation_id: conversationId } : {}), ...(mode === 'code' ? { tool: 'code' } : {}) }),
+        body: JSON.stringify({ message: text, messages: turns, mode, stream: true, ...(conversationId ? { conversation_id: conversationId } : {}), ...(files.length ? { attachments: files.map(({ name, data }) => ({ name, data })) } : {}), ...(mode === 'code' ? { tool: 'code' } : {}) }),
       });
       const remaining = response.headers.get('x-lsuperagen-rate-remaining');
       const limit = response.headers.get('x-lsuperagen-rate-limit');
@@ -188,6 +369,7 @@
         const result = await response.json().catch(() => ({}));
         wait.remove();
         turns.pop();
+        restoreFiles();
         if (response.status === 401) return toLogin();
         bubble('e', result.message || 'ส่งข้อความไม่สำเร็จ (' + response.status + ')');
         return;
@@ -227,11 +409,17 @@
       wait.remove();
       if (!final || !final.ok) {
         turns.pop();
+        restoreFiles();
         if (answerNode) answerNode.classList.add('e');
         bubble('e', (final && final.message) || 'การเชื่อมต่อขาดกลางคัน ลองใหม่อีกครั้ง');
         return;
       }
       const answer = final.output || streamed;
+      // Later turns only carry the file names, matching what chat history stores.
+      if (files.length) {
+        const noted = text + '\n\n📎 ' + files.map((item) => item.name).join(', ');
+        if (noted.length <= 12000) userTurn.content = noted;
+      }
       turns.push({ role: 'assistant', content: answer });
       if (final.conversation_id) {
         setConversation(final.conversation_id);
@@ -248,9 +436,12 @@
       wait.remove();
       if (answerNode) answerNode.classList.add('e');
       turns.pop();
+      restoreFiles();
       bubble('e', 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ลองใหม่อีกครั้ง');
     } finally {
-      send.disabled = false;
+      sending = false;
+      syncControls();
+      renderPending();
       input.focus();
     }
   });
@@ -263,7 +454,7 @@
       $('who').textContent = session.user?.name || session.user?.email || 'Signed in';
       model.innerHTML = '<option>OpenAI</option>';
       input.disabled = false;
-      send.disabled = false;
+      syncControls();
       const probe = await fetch('/api/chats', { credentials: 'same-origin', cache: 'no-store' }).catch(() => null);
       historyAvailable = Boolean(probe && probe.ok);
       historyToggle.hidden = !historyAvailable;

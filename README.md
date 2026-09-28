@@ -2,12 +2,12 @@
 
 AI Framework: **LSUPERAGENT public AI workspace**
 
-Last updated: **2026-09-28T20:12:17+07:00 Asia/Bangkok**
-Last update task: **Begin owner-authorized Next.js migration with a native /loading route in next-app/.**
+Last updated: **2026-09-29T01:20:31+07:00 Asia/Bangkok**
+Last update task: **Stream /chat answers, save per-account chat history in D1 (agentssdkspace, binding DB), and accept image/PDF attachments on /api/chat.**
 
-The proposed one-owner session continuity system is specified in [`docs/session-continuity-pilot.md`](docs/session-continuity-pilot.md). It is design-only; no database or resumable chat runtime has been created.
+The proposed one-owner session continuity system is specified in [`docs/session-continuity-pilot.md`](docs/session-continuity-pilot.md). Signed-in chat history now persists in D1 (see Chat contract below); the rest of that continuity design is not built.
 
-Feature goal: Build a Code chat entry so the signed-in owner can ask for code and receive a code-oriented AI response, with no claim that the page edits GitHub files. `/tools` links to `/chat?mode=code`; `assets/chat.js` sends `mode: "code"` and `tool: "code"` to `/api/chat`. The result is text in the chat. It is not a repository editor or a verified live-model end-to-end run. The current rate guard allows 10 requests in 10 minutes per IP and tool in a Worker isolate's memory; it is neither a durable per-user quota nor a spend cap. Chat turns remain in browser page memory and disappear on reload.
+Feature goal: Build a Code chat entry so the signed-in owner can ask for code and receive a code-oriented AI response, with no claim that the page edits GitHub files. `/tools` links to `/chat?mode=code`; `assets/chat.js` sends `mode: "code"` and `tool: "code"` to `/api/chat`. The result is text in the chat. It is not a repository editor or a verified live-model end-to-end run. The current rate guard allows 10 requests in 10 minutes per IP and tool in a Worker isolate's memory; it is neither a durable per-user quota nor a spend cap. Answers stream as NDJSON; signed-in chats are saved per account in D1 and reopen from the History panel or `?c=`.
 
 Exa Search: `/tools` links to authenticated `/exa`. It calls `POST /api/exa/search`; the Cloudflare Worker reads `EXA_API_KEY` from its environment and makes the Exa request server-side. Set `EXA_API_KEY` as a Worker secret to enable search. The browser never receives the key. Search is login-gated and the Worker rate limit is temporary, not a spend cap.
 
@@ -36,7 +36,7 @@ Agents working in this repository must treat this stack as pinned unless the own
 | Owner workspace | `/dev` |
 | Control-plane reference | `/dev/control-plane/` |
 | Route decision | `/control` redirects to `/dev` |
-| Database/storage | No D1/R2/KV binding currently; session history requires a durable store and migration |
+| Database/storage | D1 `agentssdkspace` bound as `DB` for chat history (`migrations/0001_chat_history.sql`); no R2/KV; attachments are not stored |
 | Design base | Opaque #000000 canvas; Normal black/white with restrained blue-gray accent; Docs black with muted purple accent |
 | Deployment rule | Do not claim live/deployed without verifiable evidence |
 
@@ -70,6 +70,12 @@ Every feature or page must declare its data contract before implementation.
 | `docs_page` | slug `[a-z0-9-]+` | `/docs/:page`, `assets/docs-nav.js` | Must have a matching `docs-content/<slug>.html`; unknown slugs render a not-found message. |
 | `api_key` | string `lsg_…` | `POST /api/sdk/keys` | Stateless signed token, 30-day expiry, shown once; never stored or logged. |
 | `quota_remaining` | number or unavailable | `/api/chat` rate headers | Shows only the current isolate's temporary rate count after a successful response. |
+| `stream` | boolean, optional | `/api/chat` request body, `assets/chat.js` | `true` returns `application/x-ndjson` (`delta`* then one `done` or `error`); omitted keeps the single JSON response. |
+| `conversation_id` | string `c_` + 32 hex, optional | `/api/chat` request and response, `src/chat-store.js` | Request: continue that conversation only if the caller owns it. Response: present only when the exchange was saved. |
+| `history_saved` | boolean, response only | `/api/chat` response / `done` event | Present only for signed-in `/api/chat` with D1 bound; `false` means the answer is real but was not stored. |
+| `attachments` | array, optional, 0–4 items | `/api/chat` request body, `assets/chat.js` | Current user turn only; ≤20 MB decoded total; whole request body ≤28 MB (else 413). Invalid → 400 `validation_error`, no provider call. |
+| `attachments[].data` | string, required | base64 `data:` URL built in the browser | MIME `image/png`, `image/jpeg`, `image/webp`, `image/gif` (≤5 MB) or `application/pdf` (≤10 MB); base64 length a multiple of 4. Never stored. |
+| `attachments[].name` | string, optional | file name from the browser | Control characters removed, ≤120 characters, default `image` / `document.pdf`. Stored in history as `📎 name` only when the turn stays ≤12,000 characters. |
 
 Mock fixtures are allowed only when named as fixtures. Placeholder content must not be presented as live functionality.
 
@@ -102,7 +108,7 @@ And /dev/control-plane/ remains docs/reference unless explicitly changed
 Agents must not do the following:
 
 - Do not push unrelated templates into `main`.
-- Do not migrate auth or platforms to Supabase/Vercel/Railway without a current owner instruction. A small D1 database is allowed for the requested one-owner continuity pilot after its data model, cost, rollback, and recovery checks are defined; no D1 binding exists yet.
+- Do not migrate auth or platforms to Supabase/Vercel/Railway without a current owner instruction. D1 is approved by the owner (2026-09-28) for chat history and a planned per-account rate limit; `agentssdkspace` is bound as `DB`.
 - Do not overwrite `index.html` with generic landing-page templates.
 - Do not change `/control` away from `/dev` unless the owner explicitly changes route policy.
 - Do not expose secrets or ask the owner to paste secrets into chat.
@@ -149,6 +155,10 @@ Content fields: heading and lead are static strings sourced from each HTML page;
 
 Acceptance: remove the entire AI WORKSPACE intro row; reduce header brand size and spacing; revise all docs introductions toward application and outcome; preserve form IDs, action URLs and runtime scripts. Deployment is unverified until a live check confirms the new revision.
 
+
+## Chat contract — 2026-09-28
+
+`POST /api/chat` (login required) accepts `stream: true` and then returns `application/x-ndjson`: `delta` events, then exactly one `done` or `error` event. Signed-in exchanges are saved to D1 and the response adds `conversation_id` and `history_saved`; `GET /api/chats`, `GET /api/chats/:id` and `DELETE /api/chats/:id` serve only the caller's own conversations. `attachments` (up to 4 base64 data URLs: PNG/JPEG/WebP/GIF ≤5 MB, PDF ≤10 MB, ≤20 MB total) go to the model as `input_image` / `input_file` for the current turn only; history keeps just the file names. Field-level contract: the `stream`, `conversation_id`, `history_saved` and `attachments` rows in §3 Data Contract above. The SDK route `/v1/chat` does not save history.
 
 ## Next.js migration — 2026-09-28
 
