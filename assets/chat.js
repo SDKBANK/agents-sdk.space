@@ -123,6 +123,8 @@
   const MAX_PDF_BYTES = 10 * 1024 * 1024;
   const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
   const pending = [];
+  let preparing = 0;
+  let sending = false;
   const pendingBox = $('pending');
   const attachButton = $('attach');
   const fileInput = $('file');
@@ -176,13 +178,31 @@
       remove.type = 'button';
       remove.textContent = '×';
       remove.setAttribute('aria-label', 'เอา ' + item.name + ' ออก');
-      remove.addEventListener('click', () => { pending.splice(index, 1); renderPending(); });
+      remove.disabled = sending;
+      remove.addEventListener('click', () => { if (!sending) { pending.splice(index, 1); renderPending(); } });
       chip.append(name, remove);
       pendingBox.append(chip);
     });
   }
 
+  function syncControls() {
+    send.disabled = sending || preparing > 0 || input.disabled;
+    attachButton.disabled = sending || input.disabled;
+  }
+
   async function addFiles(files) {
+    if (sending) return;
+    preparing += 1;
+    syncControls();
+    try {
+      await addFilesNow(files);
+    } finally {
+      preparing -= 1;
+      syncControls();
+    }
+  }
+
+  async function addFilesNow(files) {
     for (const file of files) {
       if (pending.length >= MAX_FILES) { bubble('e', 'แนบได้สูงสุด ' + MAX_FILES + ' ไฟล์ต่อข้อความ'); break; }
       try {
@@ -208,7 +228,7 @@
   });
   input.addEventListener('paste', (event) => {
     const files = Array.from(event.clipboardData?.files || []);
-    if (!files.length) return;
+    if (!files.length || attachButton.disabled) return;
     event.preventDefault();
     addFiles(files);
   });
@@ -268,9 +288,10 @@
 
   $('composer').addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (send.disabled || preparing > 0) return;
     const files = pending.splice(0);
     const text = input.value.trim() || (files.length ? 'ช่วยดูไฟล์ที่แนบมา' : '');
-    if (!text || send.disabled) {
+    if (!text) {
       pending.push(...files);
       return;
     }
@@ -297,9 +318,10 @@
       }
       userNode.prepend(strip);
     }
+    // Attaching is locked while this request runs, so the failed set comes back whole.
     const restoreFiles = () => {
       if (!files.length) return;
-      pending.unshift(...files.slice(0, MAX_FILES - pending.length));
+      pending.unshift(...files);
       renderPending();
     };
     const userTurn = { role: 'user', content: text };
@@ -307,7 +329,9 @@
     while (turns.length > MAX_TURNS) turns.shift();
     if (turns[0]?.role !== 'user') turns.shift();
 
-    send.disabled = true;
+    sending = true;
+    syncControls();
+    renderPending();
     const wait = bubble('a', 'กำลังคิด');
     wait.classList.add('thinking');
     let answerNode = null;
@@ -372,7 +396,10 @@
       }
       const answer = final.output || streamed;
       // Later turns only carry the file names, matching what chat history stores.
-      if (files.length) userTurn.content = text + '\n\n📎 ' + files.map((item) => item.name).join(', ');
+      if (files.length) {
+        const noted = text + '\n\n📎 ' + files.map((item) => item.name).join(', ');
+        if (noted.length <= 12000) userTurn.content = noted;
+      }
       turns.push({ role: 'assistant', content: answer });
       if (final.conversation_id) {
         setConversation(final.conversation_id);
@@ -392,7 +419,9 @@
       restoreFiles();
       bubble('e', 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ลองใหม่อีกครั้ง');
     } finally {
-      send.disabled = false;
+      sending = false;
+      syncControls();
+      renderPending();
       input.focus();
     }
   });
@@ -405,8 +434,7 @@
       $('who').textContent = session.user?.name || session.user?.email || 'Signed in';
       model.innerHTML = '<option>OpenAI</option>';
       input.disabled = false;
-      send.disabled = false;
-      attachButton.disabled = false;
+      syncControls();
       const probe = await fetch('/api/chats', { credentials: 'same-origin', cache: 'no-store' }).catch(() => null);
       historyAvailable = Boolean(probe && probe.ok);
       historyToggle.hidden = !historyAvailable;

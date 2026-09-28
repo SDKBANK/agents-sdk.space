@@ -74,6 +74,7 @@ test('invalid attachments are rejected before any provider call', async () => {
     [{ name: 'x.png', data: 'https://example.com/x.png' }],
     [{ name: 'x.png', data: 'data:image/png;base64,not base64!' }],
     [{ name: 'empty.png', data: 'data:image/png;base64,' }],
+    [{ name: 'short.png', data: 'data:image/png;base64,AAAAA' }],
     [{ name: 'big.png', data: big }],
     Array.from({ length: 5 }, (_, i) => ({ name: i + '.png', data: PNG })),
     'not-an-array'
@@ -110,4 +111,28 @@ test('with attachments, a model that rejects image input falls back to the next 
     assert.equal(response.status, 200);
     assert.equal(models.length, 2);
   } finally { globalThis.fetch = original; }
+});
+
+test('with attachments, a 400 that is not about image support is not retried on other models', async () => {
+  const original = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response(JSON.stringify({ error: { message: 'Invalid base64 image data.' } }), { status: 400 });
+  };
+  try {
+    const response = await chat({ message: 'ดูรูป', attachments: [{ name: 'a.png', data: PNG }] });
+    assert.equal(response.status, 502);
+    assert.equal(calls, 1);
+  } finally { globalThis.fetch = original; }
+});
+
+test('the attachment note is dropped when it would push a history turn past 12,000 characters', async () => {
+  const saved = [];
+  const statement = (sql, params = []) => ({ bind: (...v) => statement(sql, v), first: async () => null, all: async () => ({ results: [] }), run: async () => saved.push({ sql, params }) });
+  const DB = { prepare: (sql) => statement(sql), batch: async (list) => { for (const s of list) await s.run(); } };
+  const longText = 'ก'.repeat(11995);
+  await capture(() => chat({ message: longText, attachments: [{ name: 'photo.png', data: PNG }] }, { OPENAI_API_KEY: 'k', AUTH_SESSION_SECRET: SESSION_SECRET, DB }));
+  const userRow = saved.find((row) => /INSERT INTO messages/.test(row.sql) && row.params[1] === 'user');
+  assert.equal(userRow.params[2], longText);
 });

@@ -415,6 +415,7 @@ function parseAttachments(value) {
     const kind = match ? ATTACHMENT_KINDS[match[1]] : null;
     if (!kind) return { error: 'รองรับเฉพาะรูปภาพ (PNG, JPEG, WebP, GIF) และ PDF' };
     const base64 = match[2];
+    if (base64.length % 4) return { error: 'ข้อมูลไฟล์แนบไม่ถูกต้อง' };
     const bytes = Math.floor(base64.length * 3 / 4) - (base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0);
     if (!bytes) return { error: 'ไฟล์แนบว่างเปล่า' };
     if (bytes > ATTACHMENT_MAX_BYTES[kind]) return { error: kind === 'pdf' ? 'ไฟล์ PDF ต้องไม่เกิน 10 MB' : 'รูปภาพต้องไม่เกิน 5 MB' };
@@ -435,8 +436,18 @@ function withAttachments(input, message, attachments) {
   return Array.isArray(input) ? input.slice(0, -1).concat({ role: 'user', content }) : [{ role: 'user', content }];
 }
 
+// History turns are capped at 12,000 characters, so the note is dropped rather than overflow a turn.
+const HISTORY_TURN_MAX = 12000;
 function attachmentNote(message, attachments) {
-  return attachments.length ? message + '\n\n📎 ' + attachments.map((item) => item.name).join(', ') : message;
+  if (!attachments.length) return message;
+  const noted = message + '\n\n📎 ' + attachments.map((item) => item.name).join(', ');
+  return noted.length <= HISTORY_TURN_MAX ? noted : message;
+}
+
+// Only errors saying the model cannot take image/file input justify trying another model.
+function isAttachmentSupportError(data) {
+  const msg = data && data.error && data.error.message ? String(data.error.message) : '';
+  return /(image|file|pdf|input_image|input_file|content type)[^.]*(not supported|unsupported|only supported|not allowed|does not support)|(does not support|doesn't support|not support)[^.]*(image|file|pdf|vision)/i.test(msg);
 }
 
 function inferTool(body, request) {
@@ -686,8 +697,8 @@ async function handleChat(request, env, session = null) {
       return json({ ok: true, status: 'completed', message: output, output, sources: extractSources(data), ...extra }, 200, baseHeaders);
     }
     lastStatus = providerResponse.status;
-    // A model that cannot read images/PDFs rejects the input with 400; try the next one.
-    if (!isModelAccessError(data) && !(attachments.items.length && providerResponse.status === 400)) break;
+    // A model that cannot read images/PDFs rejects the input; try the next one. Other errors stop here.
+    if (!isModelAccessError(data) && !(attachments.items.length && isAttachmentSupportError(data))) break;
   }
   return json({ ok: false, status: 'service_error', message: lastStatus === 429 ? 'บริการ AI ถูกใช้งานหนาแน่น กรุณาลองใหม่อีกครั้ง' : 'บริการ AI ไม่สามารถทำคำขอนี้ได้ในขณะนี้' }, lastStatus === 429 ? 429 : 502, baseHeaders);
 }
