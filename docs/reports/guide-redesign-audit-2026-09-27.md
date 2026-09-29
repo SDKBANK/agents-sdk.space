@@ -151,3 +151,6 @@ Commit แก้ test: `dff72afbb3423cf92d9663c4b01c531d3c69c8fe`.
 - `00ff90c029d3d66edc66090db176670eca92e600` — deep research
 
 ยังไม่ได้เชื่อม route หรือเปิดความสามารถดังกล่าว เพราะต้องมี signed-session, quota/ownership, token provenance, CSRF, repo/branch allowlist, audit log, SSRF blocking, timeout/size limits และ contract tests ก่อน
+
+
+Security follow-up: ลบการรับ `github_token` จาก request body แล้วใน commit `f3d830ae2872de6928c7499191b15a38045bb1f0`; helper จะอ่านได้เฉพาะ token จาก verified server-side session เท่านั้น โมดูลยังคง `NOT WIRED YET` จนกว่า safety gates ที่เหลือจะครบ
