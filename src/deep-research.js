@@ -1,3 +1,7 @@
+// NOT WIRED YET: This module is not imported or routed by src/index.js.
+// Before enabling it, add signed-session and quota enforcement plus URL validation,
+// SSRF/private-network blocking, redirect checks, response-size/time limits, and citation tests.
+
 /**
  * Deep Research — โหมดค้นคว้าระดมสมอง พร้อมแหล่งอ้างอิง
  */
