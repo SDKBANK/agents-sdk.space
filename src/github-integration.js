@@ -8,8 +8,9 @@
  */
 const GITHUB_API = "https://api.github.com";
 
-function getGitHubToken(session, body) {
-  if (body?.github_token) return body.github_token;
+function getGitHubToken(session) {
+  // Authorization may only come from the verified server-side session.
+  // Never accept OAuth or personal access tokens from a request body.
   if (session?.github_access_token) return session.github_access_token;
   return null;
 }
