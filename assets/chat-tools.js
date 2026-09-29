@@ -48,9 +48,10 @@
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'chat-tools-item';
-    button.dataset.tool = tool;
+    button.setAttribute('data-tool', tool);
     button.textContent = label;
     button.setAttribute('aria-checked', 'false');
+    if (tool !== 'github') button.disabled = true;
     menu.append(button);
     buttons.set(tool, button);
   }
@@ -76,6 +77,7 @@
     const label = selectedTool ? buttons.get(selectedTool).textContent : 'เครื่องมือ';
     toggle.textContent = label;
     if (modeLabel) modeLabel.textContent = selectedTool ? label : 'แชท';
+    if (attach && !busy) attach.disabled = Boolean(selectedTool) || input.disabled;
     setMenu(false);
   }
 
@@ -131,7 +133,9 @@
         const line = buffer.slice(0, cut).trim();
         buffer = buffer.slice(cut + 1);
         if (!line) continue;
-        try { onEvent(JSON.parse(line)); } catch (_) {}
+        let event;
+        try { event = JSON.parse(line); } catch (_) { continue; }
+        onEvent(event);
       }
     }
   }
@@ -140,6 +144,7 @@
     const wait = bubble('a', 'กำลังค้นหา');
     let output = null;
     let sources = [];
+    let streamError = '';
     try {
       const response = await fetch('/api/deep-research/stream', {
         method: 'POST',
@@ -154,8 +159,9 @@
           output.text.textContent += event.text;
           chat.scrollTop = chat.scrollHeight;
         }
-        if (event.type === 'error') throw new Error(event.message || 'ค้นหาไม่สำเร็จ');
+        if (event.type === 'error') streamError = event.message || 'ค้นหาไม่สำเร็จ';
       });
+      if (streamError) throw new Error(streamError);
       wait.remove();
       if (!output) output = answerBubble('ค้นหา');
       if (!output.text.textContent) output.text.textContent = 'ไม่พบคำตอบจากการค้นหา';
