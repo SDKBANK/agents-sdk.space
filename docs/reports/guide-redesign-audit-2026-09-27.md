@@ -127,3 +127,27 @@ Commit แก้ test: `dff72afbb3423cf92d9663c4b01c531d3c69c8fe`.
 3. ห้ามชี้โดเมน production เข้า `next-app` จนกว่าจะย้าย auth/session-aware routes และเลิก root redirect ชั่วคราว เพราะเอกสาร migration ระบุว่าจะเกิด redirect loop
 4. ก่อนย้าย `/guide` ให้ล็อก contract เดิม: signed session, `/keys → /guide`, `lsupergen-sdk@0.1.0` และ Proof report 5/5
 5. ทดสอบร่วมกับการเปลี่ยน chat ใหม่: NDJSON stream ขาดกลางคัน, conversation ownership ใน D1, reload จาก `?c=` และ storage failure ที่ต้องไม่ทำให้คำตอบจริงหาย
+
+
+## Update — backend feature merges and unwired modules
+
+ตรวจการเปลี่ยนแปลงหลัง Next.js migration จนถึง merge `9364845ab7c32a0aca47d4e5a3dbc6161a322826`:
+
+- `/api/chat` เพิ่ม Claude เป็น provider ทางเลือก พร้อม provider picker, streaming interpreter, attachments, quota refund และ history contract
+- ก่อนหน้านั้นมี per-account D1 quota, image/PDF attachments และการคืน prompt เมื่อส่งล้มเหลว
+- GitHub API ยังไม่แสดง commit status หรือ workflow run สำหรับ merge ล่าสุด จึงยังไม่ถือว่า test suite ผ่านบน `main`
+- การเปลี่ยนเหล่านี้ไม่แก้ `guide.html` โดยตรง แต่เพิ่ม regression surface ของ session, quota, storage และ streaming ที่ต้องตรวจร่วมก่อน migration ของ `/guide`
+
+พบข้อผิดพลาดด้านสถานะการเชื่อมต่อใน commit `625585888290528fe65033e67ab38920d1808797`:
+
+- เพิ่ม `src/multi-model-chat.js`, `src/github-integration.js` และ `src/deep-research.js`
+- code search บน default branch พบ handler อยู่เฉพาะในไฟล์ของตัวเอง; `src/index.js` ไม่มี import/route จึงเป็น dead code และยังใช้งานจริงไม่ได้
+- GitHub module มีทางรับ `github_token` จาก request body และ deep-research มีการ fetch URL โดยยังไม่มี SSRF/private-network guard; ห้าม wire เข้าสู่ public route ในสภาพปัจจุบัน
+
+แก้สถานะให้ตรงข้อเท็จจริงแล้วโดยเพิ่ม `NOT WIRED YET` และ safety gates ที่หัวทั้งสามไฟล์:
+
+- `32fee824467b9696434c7d3e4a45f4b6a670ee05` — multi-model
+- `77760eda6cef4577eeb1583db486de3a7cbaeaba` — GitHub integration
+- `00ff90c029d3d66edc66090db176670eca92e600` — deep research
+
+ยังไม่ได้เชื่อม route หรือเปิดความสามารถดังกล่าว เพราะต้องมี signed-session, quota/ownership, token provenance, CSRF, repo/branch allowlist, audit log, SSRF blocking, timeout/size limits และ contract tests ก่อน
