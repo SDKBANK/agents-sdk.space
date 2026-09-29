@@ -2,8 +2,8 @@
 
 AI Framework: **LSUPERAGENT public AI workspace**
 
-Last updated: **2026-09-29T03:15:28+07:00 Asia/Bangkok**
-Last update task: **Add a per-account daily quota in D1 (50 chat messages, 10 images, 2000 site-wide; reset 00:00 Thai time) and deliver answers cut off at the output cap flagged truncated.**
+Last updated: **2026-09-29T06:09:50+07:00 Asia/Bangkok**
+Last update task: **Add Claude (Anthropic Messages API) as an optional second chat provider selectable in /chat; OpenAI stays the default.**
 
 The proposed one-owner session continuity system is specified in [`docs/session-continuity-pilot.md`](docs/session-continuity-pilot.md). Signed-in chat history now persists in D1 (see Chat contract below); the rest of that continuity design is not built.
 
@@ -71,6 +71,7 @@ Every feature or page must declare its data contract before implementation.
 | `api_key` | string `lsg_…` | `POST /api/sdk/keys` | Stateless signed token, 30-day expiry, shown once; never stored or logged. |
 | `quota_remaining` | number or unavailable | `/api/chat` headers `x-lsuperagen-quota-remaining` / `-limit` / `-reset` | Today's remaining units for the signed-in account (D1). Absent for the owner or without D1; the page then falls back to the burst-guard count. |
 | `quota_exceeded` | 429 response, `status` value | `/api/chat`, `/api/image`, `/v1/chat`, `/v1/image` | Daily limit reached (`reset_at` = next 00:00 Asia/Bangkok, plus `retry-after`). No provider call is made. |
+| `provider` | enum `openai` (default), `claude`; optional | `/api/chat` request body, `/chat` picker (`assets/chat.js`, remembered in localStorage) | `claude` needs the `ANTHROPIC_API_KEY` secret (else 503) and only chat/code modes (web tools → 400). Options come from `GET /api/chat-providers`, which returns availability booleans only. |
 | `truncated` | boolean, response only | `/api/chat` response / `done` event | `true` when the answer stopped at the output-token cap; the partial answer is real and is shown with a "type 'ต่อ' to continue" note. |
 | `stream` | boolean, optional | `/api/chat` request body, `assets/chat.js` | `true` returns `application/x-ndjson` (`delta`* then one `done` or `error`); omitted keeps the single JSON response. |
 | `conversation_id` | string `c_` + 32 hex, optional | `/api/chat` request and response, `src/chat-store.js` | Request: continue that conversation only if the caller owns it. Response: present only when the exchange was saved. |

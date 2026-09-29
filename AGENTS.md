@@ -2,8 +2,8 @@
 
 AI Framework: **LSUPERAGENT Public Workspace Operating Instructions**
 
-Last updated: **2026-09-29T03:15:28+07:00 Asia/Bangkok**
-Last update task: **Add a per-account daily quota in D1 (50 chat messages, 10 images, 2000 site-wide; reset 00:00 Thai time) and deliver answers cut off at the output cap flagged truncated.**
+Last updated: **2026-09-29T06:09:50+07:00 Asia/Bangkok**
+Last update task: **Add Claude (Anthropic Messages API) as an optional second chat provider selectable in /chat; OpenAI stays the default.**
 
 This file is the first file every AI agent must read before modifying this repository. It defines the repo memory boundary, write protocol, data contract discipline, and negative constraints.
 

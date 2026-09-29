@@ -113,6 +113,12 @@ POST /api/chat          burst guard: 10 requests / 10 min per IP+tool (in-memory
                           over quota → 429 { status: "quota_exceeded", reset_at }; headers x-lsuperagen-quota-*
                           /v1/chat and /v1/image charge the SDK key owner's quota
                         answer cut at max_output_tokens → delivered with truncated: true (not an error)
+                        body.provider: "openai" (default) | "claude" — Claude is an optional second provider:
+                          POST api.anthropic.com/v1/messages (raw fetch, anthropic-version 2023-06-01),
+                          model ANTHROPIC_MODEL or claude-opus-5-5, fallbacks "default" on refusal,
+                          same quota/history/attachments/streaming; chat + code modes only (no web tools);
+                          refusal → error status "refused" (no fake answer, quota refunded)
+        ├─ /api/chat-providers GET        login required → which providers have a key (booleans only)
                         body.stream === true → application/x-ndjson:
                           {"type":"delta","text"} … then one {"type":"done","ok":true,"output","sources"}
                           or one {"type":"error","ok":false,"message"}; errors before streaming stay JSON
@@ -146,13 +152,15 @@ Firebase (public web config, plain vars):
 
 Secrets:
   AUTH_SESSION_SECRET      session cookie signing (required for any login)
-  OPENAI_API_KEY           chat + image
+  OPENAI_API_KEY           chat + image (default provider)
+  ANTHROPIC_API_KEY        optional: enables Claude in the /chat provider picker
   GOOGLE_CLIENT_SECRET     direct Google OAuth
   GITHUB_CLIENT_SECRET     direct GitHub OAuth
 
 Other vars:
   GOOGLE_CLIENT_ID, GITHUB_CLIENT_ID
   OPENAI_MODEL             preferred chat model
+  ANTHROPIC_MODEL          optional Claude model override (default claude-opus-5-5)
   CHAT_DAILY_LIMIT, IMAGE_DAILY_LIMIT, SITE_DAILY_LIMIT   optional quota overrides (defaults 50 / 10 / 2000)
   OWNER_GOOGLE_EMAIL, OWNER_GOOGLE_SUB, ADMIN_ALLOWED_LOGINS   owner/dev gate
   GITHUB_TOKEN             optional secret, read-only public token; raises GitHub rate limit for the /news Community tab
