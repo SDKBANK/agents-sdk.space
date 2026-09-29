@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 const visibleHtml = (html) => html
@@ -30,6 +31,12 @@ test('chat tools client wires research and multi-model tools but leaves GitHub i
   assert.match(client, /\/api\/deep-research\/stream/);
   assert.match(client, /\/api\/multi-chat\/stream/);
   assert.doesNotMatch(client, /\/api\/github\//);
+});
+
+test('chat tools browser script is valid JavaScript', () => {
+  const path = new URL('../assets/chat-tools.js', import.meta.url);
+  const result = spawnSync(process.execPath, ['--check', path.pathname], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
 test('worker entrypoint exposes authenticated routes for provider discovery, research, and multi-model chat', async () => {
