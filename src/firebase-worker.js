@@ -1,5 +1,14 @@
 import legacyWorker from './index.js';
 import {
+  handleMultiModelChat,
+  handleMultiModelChatStream,
+  handleProviderList,
+} from './multi-model-chat.js';
+import {
+  handleDeepResearch,
+  handleDeepResearchStream,
+} from './deep-research.js';
+import {
   createLegacySessionCookie,
   firebaseConfigFromEnv,
   identityToolkitUserMessage,
@@ -195,6 +204,55 @@ async function handlePlatformEmailPasswordReset(request, env) {
   }
 }
 
+async function authenticatedUser(request, env, ctx) {
+  const url = new URL(request.url);
+  url.pathname = '/api/auth/session';
+  url.search = '';
+  const headers = new Headers();
+  const cookie = request.headers.get('cookie');
+  if (cookie) headers.set('cookie', cookie);
+  const response = await legacyWorker.fetch(new Request(url.toString(), { method: 'GET', headers }), env, ctx);
+  const result = await response.json().catch(() => ({}));
+  return result.authenticated ? result.user || {} : null;
+}
+
+async function handleProviderStatus(env) {
+  const response = handleProviderList(env);
+  const result = await response.json().catch(() => ({ ok: false, providers: [] }));
+  const providers = Array.isArray(result.providers) ? result.providers : [];
+  return json({
+    ...result,
+    providers,
+    capabilities: {
+      research: Boolean(env.OPENAI_API_KEY && env.EXA_API_KEY),
+      multi_model: providers.length >= 2,
+    },
+  });
+}
+
+const FEATURE_API_PATHS = new Set([
+  '/api/providers',
+  '/api/multi-chat',
+  '/api/multi-chat/stream',
+  '/api/deep-research',
+  '/api/deep-research/stream',
+]);
+
+async function handleFeatureApi(request, env, ctx, pathname) {
+  const user = await authenticatedUser(request, env, ctx);
+  if (!user) return json({ ok: false, error: 'authentication_required', message: 'กรุณาเข้าสู่ระบบก่อนใช้งาน' }, 401);
+
+  if (pathname === '/api/providers') {
+    if (request.method !== 'GET') return json({ ok: false, error: 'method_not_allowed' }, 405, { allow: 'GET' });
+    return handleProviderStatus(env);
+  }
+  if (pathname === '/api/multi-chat') return handleMultiModelChat(request, env);
+  if (pathname === '/api/multi-chat/stream') return handleMultiModelChatStream(request, env);
+  if (pathname === '/api/deep-research') return handleDeepResearch(request, env);
+  if (pathname === '/api/deep-research/stream') return handleDeepResearchStream(request, env);
+  return json({ ok: false, error: 'not_found' }, 404);
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -209,6 +267,7 @@ export default {
     if (pathname === '/api/auth/firebase/logout' && request.method === 'POST') {
       return json({ ok: true }, 200, { 'set-cookie': clearLegacyAuthCookie(), 'x-lsuperagen-auth': 'firebase-session-bridge-v1' });
     }
+    if (FEATURE_API_PATHS.has(pathname)) return handleFeatureApi(request, env, ctx, pathname);
 
     return legacyWorker.fetch(request, env, ctx);
   },
