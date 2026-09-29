@@ -1,3 +1,8 @@
+// NOT WIRED YET: This module is not imported or routed by src/index.js.
+// Do not enable it until OAuth token provenance, CSRF protection, repository/branch
+// allowlists, permission scopes, audit logging, and protected-branch behavior are reviewed.
+// A token supplied in a request body must never be accepted as authorization.
+
 /**
  * GitHub Integration — สร้าง commit และ pull request จากในแชท
  */
