@@ -1,3 +1,7 @@
+// NOT WIRED YET: This module is not imported or routed by src/index.js.
+// Before enabling it, reuse the signed-session guard, D1 quota, history ownership,
+// attachment limits, provider allowlist, and NDJSON failure semantics of /api/chat.
+
 /**
  * Multi-Model Chat — แชทที่ใช้ AI หลายโมเดลในห้องเดียว
  * รองรับ: OpenAI, Anthropic (Claude), Gemini
